@@ -1,0 +1,12 @@
+{
+  "name": "ecdysis-editorial-3d-laboratory",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev-server.mjs",
+    "start": "node dev-server.mjs",
+    "preview": "node dev-server.mjs"
+  },
+  "description": "Dependency-free ECDYSIS website with a native WebGL2 memory-molt laboratory"
+}
