@@ -321,8 +321,11 @@ export class Specimen2D{
  draw(){const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height,p=this.params;ctx.clearRect(0,0,w,h);
   const f=p.progress/100*(STAGE_COUNT-1),a=Math.min(STAGE_COUNT-1,Math.floor(f)),b=Math.min(STAGE_COUNT-1,a+1),t=f-a;
   for(const [i,alpha] of [[a,1-t],[b,t]]){if(alpha<.001)continue;const img=this.tinted(i);if(!img)continue;
-   const s=Math.min(w/(img.width*1.12),h/(img.height*1.14))*p.scale*this.zoom*specimenScaleBias;
-   ctx.save();ctx.translate(w/2,h/2);ctx.rotate(this.angle||0);ctx.scale(s,s);ctx.globalAlpha=alpha;
+   const stageScale=(i===1?1.1385:1); // V48: HATCH default is 1.1x the former V47 size
+   const stretchY=(i===2?1.035:1); // V48: 2D MOLT is slightly taller vertically
+   const stageYOffset=(i===1?h*.066:0); // V58: 2D HATCH an additional 1.0% canvas-height lower
+   const s=Math.min(w/(img.width*1.12),h/(img.height*1.14))*p.scale*this.zoom*specimenScaleBias*stageScale;
+   ctx.save();ctx.translate(w/2,h/2 + stageYOffset);ctx.rotate(this.angle||0);ctx.scale(s,s*stretchY);ctx.globalAlpha=alpha;
    const m=p.modification;
    if(m<.001){ctx.drawImage(img,-img.width/2,-img.height/2);}else{
     // Continuous single-piece ripple; no artificial 4-way peel.
@@ -342,7 +345,7 @@ precision highp float;
 layout(location=0) in vec3 a_position;
 layout(location=1) in vec3 a_normal;
 layout(location=2) in vec2 a_uv;
-uniform float u_aspect,u_scale,u_yaw,u_pitch,u_modification;
+uniform float u_aspect,u_scale,u_yaw,u_pitch,u_modification,u_verticalRatio,u_stageOffsetY;
 out vec3 v_obj;
 out vec3 v_normal;
 out vec3 v_objNormal;
@@ -367,7 +370,7 @@ void main() {
   float perspective = 4.6 / max(1.35, 4.6 - rp.z);
   gl_Position = vec4(
     rp.x*u_scale*.66*perspective/u_aspect,
-    rp.y*u_scale*.75*perspective,
+    rp.y*u_scale*.75*perspective*u_verticalRatio+u_stageOffsetY,
     rp.z*.09,1.0
   );
 }`;
@@ -617,7 +620,7 @@ function stableStageWeights(progress,counts){
 }
 
 export class Specimen3D{
- constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:true,preserveDrawingBuffer:true,premultipliedAlpha:false});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=-.38;this.pitch=.2;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
+ constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:true,preserveDrawingBuffer:true,premultipliedAlpha:false});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','verticalRatio','stageOffsetY','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=0;this.pitch=0;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
   canvas.addEventListener('pointerdown',e=>{
    this.drag={x:e.clientX,y:e.clientY,yaw:this.yaw,pitch:this.pitch};
    canvas.setPointerCapture(e.pointerId);
@@ -680,14 +683,24 @@ export class Specimen3D{
   this.requestDraw();
  }
  draw(){const gl=this.gl,p=this.params;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(this.prog);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.CULL_FACE);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
-  const set=(k,v)=>gl.uniform1f(this.uniforms[k],v);set('aspect',this.canvas.width/this.canvas.height);set('scale',p.scale*this.zoom*specimenScaleBias);set('yaw',this.yaw);set('pitch',this.pitch);set('modification',p.modification);set('palette',palettes[p.palette]??0);set('monoWhite',p.monoWhite||0);set('intensity',p.intensity);set('hue',p.hue);set('wire',p.mode==='wire'?1:0);set('glow',clamp(1-(performance.now()-this.flashAt)/440)**2);gl.uniform3fv(this.uniforms.a,rgb(p.inkA));gl.uniform3fv(this.uniforms.b,rgb(p.inkB));gl.uniform1i(this.uniforms.tex,0);
+  const set=(k,v)=>gl.uniform1f(this.uniforms[k],v);const baseScale=p.scale*this.zoom*specimenScaleBias;set('aspect',this.canvas.width/this.canvas.height);set('yaw',this.yaw);set('pitch',this.pitch+0.17*clamp((p.progress-50)/50));set('modification',p.modification);set('palette',palettes[p.palette]??0);set('monoWhite',p.monoWhite||0);set('intensity',p.intensity);set('hue',p.hue);set('wire',p.mode==='wire'?1:0);set('glow',clamp(1-(performance.now()-this.flashAt)/440)**2);gl.uniform3fv(this.uniforms.a,rgb(p.inkA));gl.uniform3fv(this.uniforms.b,rgb(p.inkB));gl.uniform1i(this.uniforms.tex,0);
   const counts=this.meshes.map(m=>m?m.tri:0);
   const weights=stableStageWeights(p.progress,counts);
   for(let i=0;i<weights.length;i++){
    const opacity=weights[i];
    if(opacity<.045)continue;
-   const mesh=this.meshes[i]||this.meshes[0],tex=this.textures[i]||this.textures[0];if(!mesh||!tex)continue;
-   gl.clear(gl.DEPTH_BUFFER_BIT);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.bindVertexArray(mesh.vao);set('alpha',opacity);set('phaseMin',mesh.phaseMin);set('phaseMax',mesh.phaseMax);
+   // Never substitute the COCOON OBJ when HATCH or MOLT is still loading.
+   const mesh=this.meshes[i],tex=this.textures[i]||this.textures[0];if(!mesh||!tex)continue;
+   gl.clear(gl.DEPTH_BUFFER_BIT);
+   gl.activeTexture(gl.TEXTURE0);
+   gl.bindTexture(gl.TEXTURE_2D,tex);
+   gl.bindVertexArray(mesh.vao);
+   set('scale',baseScale*(i<2?1.105:1)); // Keep V57 COCOON/HATCH size (85% of V56).
+   set('verticalRatio',i===2?0.92:1.0); // Keep V56 MOLT flattening.
+   set('stageOffsetY',i===1?0.024:0.0); // V58: HATCH up 1.2% of viewport height.
+   set('alpha',opacity);
+   set('phaseMin',mesh.phaseMin);
+   set('phaseMax',mesh.phaseMax);
    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,p.mode==='wire'?mesh.lines:mesh.faces);
    gl.drawElements(p.mode==='wire'?gl.LINES:gl.TRIANGLES,p.mode==='wire'?mesh.wire:mesh.tri,gl.UNSIGNED_INT,0);
   }
@@ -711,8 +724,8 @@ export class SpecimenSoftware3D {
     this.meshes = Array(STAGE_COUNT).fill(null);
     this.atlases = Array(STAGE_COUNT).fill(null);
     this.tintCache = new Map();
-    this.yaw = -.38;
-    this.pitch = .20;
+    this.yaw = 0;
+    this.pitch = 0;
     this.zoom = 1;
     this.drag = null;
     this.dragMoved = false;
@@ -844,12 +857,14 @@ export class SpecimenSoftware3D {
     const p = this.params;
     const counts=this.meshes.map(samples=>samples?samples.length:0);
     const weights=stableStageWeights(p.progress,counts);
-    const unit = Math.min(w/4.7,h/3.6) * p.scale * this.zoom * specimenScaleBias;
+    const baseUnit = Math.min(w/4.7,h/3.6) * p.scale * this.zoom * specimenScaleBias;
     const cy=Math.cos(this.yaw),sy=Math.sin(this.yaw);
-    const cp=Math.cos(this.pitch),sp=Math.sin(this.pitch);
+    const viewPitch=this.pitch+0.17*clamp((p.progress-50)/50); // match WebGL front-on MOLT correction
+    const cp=Math.cos(viewPitch),sp=Math.sin(viewPitch);
 
     const renderStage = (i,opacity) => {
-      const samples = this.meshes[i] || this.meshes[0];
+      const unit=baseUnit*(i<2?1.105:1); // V57: COCOON/HATCH at 85% of V56
+      const samples = this.meshes[i]; // Do not show COCOON while another OBJ loads.
       const atlas = this.atlasForStage(i);
       if (!samples || !atlas || opacity < .005) return false;
       const drawList = [];
@@ -870,7 +885,7 @@ export class SpecimenSoftware3D {
         const depth = sp*y+cp*rz;
         const perspective = 4.6/Math.max(1.4,4.6-depth);
         const X = w/2+rx*unit*perspective;
-        const Y = h/2-ry*unit*perspective;
+        const Y = h/2-ry*unit*perspective*(i===2?0.92:1.0) - (i===1?h*.012:0); // V58: raise 3D HATCH 1.2%
         if (X < -80 || X > w+80 || Y < -80 || Y > h+80) continue;
         // Orient source fragment along the material's local surface direction.
         const angle = Math.atan2(v.ny, v.nx)*.27;
@@ -908,16 +923,8 @@ export class SpecimenSoftware3D {
       if(opacity<.045)return;
       rendered=renderStage(i,opacity)||rendered;
     });
-    if (!rendered) {
-      // During large OBJ parsing show the actual image rather than a blank pane.
-      const art = this.atlases[0];
-      if (art) {
-        const size=Math.min(w/2.5,h/2.5);
-        ctx.globalAlpha=.5;
-        ctx.drawImage(art,0,0,art.width,art.height,w/2-size/2,h/2-size/3,size,size*2/3);
-        ctx.globalAlpha=1;
-      }
-    }
+    // Leave the transparent viewport empty until the selected OBJ has loaded.
+    // Displaying the COCOON texture here made HATCH/MOLT switches flash.
   }
 
   exportCanvas() {

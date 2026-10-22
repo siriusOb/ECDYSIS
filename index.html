@@ -1202,8 +1202,852 @@ body > .footer #replay-intro {
   body > .footer #replay-intro { justify-self: start; }
 }
 
+
+/* =============================================================
+   V40 — COMPACT MOLT LAB / VISUAL SCALE ONLY
+   No text or control order changes. The artwork is always square.
+   Responsive lab width leaves space for CAPTURE / LOG above the fold
+   on normal laptop windows while retaining independent panel scroll.
+   ============================================================= */
+@media (min-width: 801px) {
+  #view-molt .lab-layout {
+    width: min(100%, 1320px, max(1000px, calc(100dvh + 275px)));
+    margin-inline: auto;
+    grid-template-rows: min-content;
+  }
+  #view-molt .lab-layout .canvas-stage {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    height: auto !important;
+  }
+  #view-molt .lab-layout .control-panel {
+    padding-top: 14px;
+    padding-bottom: 17px;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto;
+  }
+  #view-molt .lab-layout .dial {
+    width: min(130px, 51%);
+  }
+  #view-molt .lab-layout .dial-center b {
+    font-size: clamp(44px, 3.6vw, 58px);
+  }
+  #view-molt .lab-layout .v7-dimension {
+    margin: 5px 0;
+    padding: 5px 0 6px;
+  }
+  #view-molt .lab-layout .range-long {
+    margin: 6px 0;
+  }
+  #view-molt .lab-layout .control-rule {
+    margin-top: 7px;
+    padding-top: 7px;
+  }
+  #view-molt .lab-layout .sliders {
+    gap: 7px;
+    margin-top: 7px;
+  }
+  #view-molt .lab-layout .orbit-button {
+    min-height: 42px;
+    margin: 5px 0 6px;
+  }
+  #view-molt .lab-layout .backdrop-control {
+    margin: -2px 0 2px;
+    padding-bottom: 2px;
+  }
+  #view-molt .lab-layout .palette {
+    min-height: 36px;
+    gap: 3px;
+  }
+  #view-molt .lab-layout .v7-dim-buttons button {
+    min-height: 31px;
+  }
+  #view-molt .lab-layout .backdrop-buttons button {
+    min-height: 29px;
+    padding: 5px;
+  }
+  #view-molt .lab-layout .colour-lab > p {
+    margin: 3px 0 6px;
+    line-height: 1.35;
+  }
+  #view-molt .lab-layout .colour-lab .control-rule {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+  #view-molt .lab-layout .colour-lab .ink-pickers {
+    margin-top: 5px;
+    padding-top: 5px;
+  }
+  #view-molt .lab-layout .colour-lab .sliders {
+    margin-top: 7px;
+    gap: 7px;
+  }
+  #view-molt .lab-layout .lab-actions {
+    margin-top: 8px;
+  }
+}
+
+
+/* =============================================================
+   ECDYSIS V41 — EDGE-TO-EDGE, VIEWPORT-FITTED SQUARE LAB.
+   Card-based SPECIMEN ARCHIVE, keeping all data attributes and IDs.
+   ============================================================= */
+@media (min-width:801px) {
+  #view-molt .lab-layout {
+    box-sizing:border-box;
+    display:grid;
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+    grid-template-columns:minmax(0,min(calc(100dvh - 96px),calc(100vw - 345px))) minmax(345px,1fr) !important;
+    grid-template-rows:min-content !important;
+    align-items:start !important;
+    gap:0 !important;
+  }
+  #view-molt .lab-layout .canvas-stage {
+    width:100%; height:auto !important; aspect-ratio:1 / 1;
+    min-height:0 !important; max-height:none !important;
+  }
+  #view-molt .lab-layout .control-panel {
+    box-sizing:border-box;
+    height:0 !important; min-height:100% !important; max-height:none !important;
+    overflow-y:auto !important; overflow-x:hidden !important;
+    padding:12px clamp(14px,2vw,32px) 24px !important;
+    overscroll-behavior-y:contain;
+    scrollbar-width:thin;
+    align-self:stretch;
+  }
+}
+#view-molt .lab-layout .control-panel.specimen-archive {
+  background:var(--paper);
+  color:var(--wine);
+}
+.specimen-archive .chamber-bar {padding:5px 1px 12px; font-size:9px;}
+.specimen-archive .chamber-cycle {
+  padding:12px 13px 10px;
+  background:#eee6d5;
+  border:1px solid rgba(114,9,42,.17);
+  margin-bottom:9px;
+}
+.specimen-archive .chamber-cycle-title,
+.specimen-archive .archive-divider,
+.specimen-archive .specimen-card-heading {
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.specimen-archive .chamber-cycle-title {color:#7d6864; font-size:9px;margin-bottom:4px;}
+.specimen-archive .cycle-readout {display:grid;grid-template-columns:106px minmax(0,1fr);align-items:center;gap:14px;}
+#view-molt .lab-layout .specimen-archive .dial {width:104px;max-width:none;aspect-ratio:1;justify-self:center;}
+#view-molt .lab-layout .specimen-archive .dial-center b{font-size:48px;}
+.specimen-archive .cycle-readout-copy {min-width:0;display:flex;flex-direction:column;justify-content:center;gap:7px;}
+.specimen-archive .cycle-readout-copy .dial-legend {display:flex;flex-wrap:wrap;font-size:9px;gap:2px 8px;}
+.specimen-archive .cycle-readout-copy .sequence-button {width:100%;padding:8px 6px;min-height:35px;margin:0;}
+#view-molt .lab-layout .specimen-archive .range-long {margin:5px 0 3px !important;}
+.specimen-archive .stage-buttons {margin:0;}
+.specimen-archive .stage-buttons button {font-size:9px;padding:4px 1px;}
+.specimen-archive .specimen-card {border:1px solid rgba(114,9,42,.19);padding:13px 13px 14px;margin:0 0 9px;}
+.specimen-archive .specimen-card--form {background:#fbf8ef;}
+.specimen-archive .specimen-card--pigment {background:#f1eadb;}
+.specimen-archive .specimen-card--archive {background:#f9f2e9;border-color:rgba(114,9,42,.28);margin-bottom:2px;}
+.specimen-archive .specimen-card-heading {align-items:flex-end;border-bottom:1px solid rgba(114,9,42,.19);padding-bottom:8px;margin-bottom:9px;}
+.specimen-archive .card-serial {color:#957972;font-size:8px;letter-spacing:.07em;}
+.specimen-archive .card-notation {color:#ad8e87;font-size:8px;text-align:right;}
+.specimen-archive .specimen-card-heading h3 {margin:3px 0 0;font:600 clamp(12px,1.1vw,15px)/1.2 var(--mono);letter-spacing:.025em;}
+#view-molt .lab-layout .specimen-archive .v7-dimension {border:0;margin:0 0 4px;padding:0 0 4px;}
+#view-molt .lab-layout .specimen-archive .v7-dim-heading,
+#view-molt .lab-layout .specimen-archive .backdrop-heading {font-size:9px;margin-bottom:5px;}
+#view-molt .lab-layout .specimen-archive .v7-dim-buttons button {min-height:33px;font-size:9px;}
+#view-molt .lab-layout .specimen-archive .orbit-button {margin:5px 0 8px;min-height:47px;}
+#view-molt .lab-layout .specimen-archive .backdrop-control {padding:3px 0 8px;margin:0;}
+#view-molt .lab-layout .specimen-archive .backdrop-buttons button {min-height:33px;font-size:9px;}
+.specimen-archive .archive-divider {border-top:1px solid rgba(114,9,42,.18);padding:10px 0 2px;margin-top:3px;color:#8b736c;}
+#view-molt .lab-layout .specimen-archive .mode-buttons {margin-top:6px;}
+#view-molt .lab-layout .specimen-archive .sliders {margin-top:9px;gap:9px;}
+#view-molt .lab-layout .specimen-archive .slider-row {font-size:9px;}
+#view-molt .lab-layout .specimen-archive.colour-lab > p,
+#view-molt .lab-layout .specimen-archive .colour-lab > p {margin:6px 0 9px;font-size:11px;}
+#view-molt .lab-layout .specimen-archive .palette {min-height:43px;font-size:8px;}
+#view-molt .lab-layout .specimen-archive .ink-pickers {margin-top:10px;padding-top:9px;gap:9px;flex-wrap:wrap;}
+#view-molt .lab-layout .specimen-archive .ink-pickers > span {font-size:8px;}
+.specimen-archive .archive-description {font-size:11px;color:#796761;margin:0 0 9px;line-height:1.4;}
+#view-molt .lab-layout .specimen-archive .lab-actions {margin:0;gap:8px;}
+#view-molt .lab-layout .specimen-archive .lab-actions button {font-size:10px;}
+#view-molt .lab-layout .specimen-archive .log-button {white-space:nowrap;}
+#view-molt .lab-layout .specimen-archive #log-label {font-size:9px;letter-spacing:.04em;}
+@media (min-width:801px) and (max-height:670px){
+  #view-molt .lab-layout {grid-template-columns:minmax(0,min(calc(100dvh - 91px),calc(100vw - 345px))) minmax(345px,1fr) !important;}
+  #view-molt .lab-layout .control-panel {padding-top:8px !important;}
+}
+@media (max-width:800px){
+  #view-molt .lab-layout {width:100% !important;margin:0 !important;grid-template-columns:1fr !important;grid-template-rows:auto auto !important;}
+  #view-molt .lab-layout .canvas-stage {aspect-ratio:1/1;width:100%;height:auto!important;}
+  #view-molt .lab-layout .control-panel {height:auto!important;min-height:0!important;max-height:none!important;overflow-y:visible!important;padding:16px max(5%,16px) 25px!important;}
+}
+@media (max-width:470px){
+  .specimen-archive .chamber-cycle{padding:10px;}
+  .specimen-archive .cycle-readout{grid-template-columns:94px minmax(0,1fr);gap:9px;}
+  #view-molt .lab-layout .specimen-archive .dial{width:92px;}
+  .specimen-archive .specimen-card{padding:10px;}
+  .specimen-archive .card-notation{display:none;}
+}
+
+
+/* =============================================================
+   ECDYSIS V42 — WIDE, UNSTRETCHED SPECIMEN + NARROW ARCHIVE.
+   Keep the entire viewport occupied without making the canvas square.
+   The renderer canvases are 100% of this rectangle, and both renderers
+   maintain artwork proportions internally (2D contain; 3D aspect projection).
+   ============================================================= */
+@media (min-width: 801px) {
+  #view-molt .lab-layout {
+    --archive-width: clamp(350px, 31.5vw, 495px);
+    --wide-stage-height: min(
+      calc(100dvh - 96px),
+      calc((100vw - var(--archive-width)) * 0.94)
+    );
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) var(--archive-width) !important;
+    grid-template-rows: var(--wide-stage-height) !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+  }
+  #view-molt .lab-layout .canvas-stage {
+    box-sizing: border-box;
+    width: 100% !important;
+    height: var(--wide-stage-height) !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+  }
+  #view-molt .lab-layout .control-panel {
+    box-sizing: border-box;
+    width: 100% !important;
+    height: var(--wide-stage-height) !important;
+    min-height: 0 !important;
+    max-height: var(--wide-stage-height) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    align-self: stretch !important;
+    overscroll-behavior-y: contain;
+  }
+  /* Force both renderer canvases to track the whole adjusted image stage.
+     Geometry stays centred by their own aspect-correct draw functions. */
+  #view-molt .canvas-stage #canvas-2d,
+  #view-molt .canvas-stage #webgl-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+}
+@media (max-width: 800px) {
+  /* Compact screens still use one column and keep all controls reachable. */
+  #view-molt .lab-layout {
+    width: 100% !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto auto !important;
+  }
+  #view-molt .lab-layout .canvas-stage {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1;
+  }
+  #view-molt .lab-layout .control-panel {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+}
+
+/* ================================================================
+   ECDYSIS V43 — CONTINUOUS EDITORIAL CHAMBER (NO SECTION CARDS)
+   The three function groups remain distinct through fine hairlines,
+   serial labels, typographic hierarchy and rhythm, rather than boxes.
+   V42 wide specimen layout / viewport sizing / independent scroll stay.
+   ================================================================ */
+#view-molt .control-panel.specimen-archive {
+  background: var(--paper) !important;
+  color: var(--wine);
+}
+
+/* Unbox the transformation readout: it belongs to the same surface. */
+#view-molt .specimen-archive .chamber-cycle {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 0 0 18px !important;
+}
+#view-molt .specimen-archive .chamber-cycle-title {
+  padding: 9px 0 6px !important;
+  margin: 0 0 5px !important;
+  color: var(--muted);
+}
+#view-molt .specimen-archive .cycle-readout {
+  padding: 0 2px;
+}
+
+/* Distinct groups, not distinct boxes: same paper background throughout. */
+#view-molt .specimen-archive .specimen-card,
+#view-molt .specimen-archive .specimen-card--form,
+#view-molt .specimen-archive .specimen-card--pigment,
+#view-molt .specimen-archive .specimen-card--archive {
+  background: transparent !important;
+  border: 0 !important;
+  border-top: 1px solid rgba(114,9,42,.25) !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 16px 0 19px !important;
+  margin: 0 !important;
+}
+#view-molt .specimen-archive .specimen-card--archive {
+  padding-bottom: 10px !important;
+}
+
+/* Archive register headings: index over title, peripheral metadata at right. */
+#view-molt .specimen-archive .specimen-card-heading {
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  background: transparent !important;
+  border: 0 !important;
+  margin: 0 0 12px !important;
+  padding: 0 !important;
+}
+#view-molt .specimen-archive .specimen-card-heading > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+#view-molt .specimen-archive .card-serial {
+  display: block;
+  color: #9b756f;
+  font-size: 9px;
+  line-height: 1.15;
+  letter-spacing: .11em;
+}
+#view-molt .specimen-archive .specimen-card-heading h3 {
+  font: 500 clamp(13px, 1vw, 15px)/1.2 var(--mono) !important;
+  margin: 0 !important;
+  letter-spacing: .05em;
+  color: var(--wine);
+}
+#view-molt .specimen-archive .card-notation {
+  flex-shrink: 0;
+  text-align: right;
+  color: #a28e85;
+  font-size: 8px;
+  letter-spacing: .05em;
+}
+
+/* Within FORM, distinguish MORPHOLOGY with a quiet notation line. */
+#view-molt .specimen-archive .archive-divider {
+  border-top: 1px solid rgba(114,9,42,.13) !important;
+  padding: 12px 0 0 !important;
+  margin: 11px 0 2px !important;
+}
+#view-molt .specimen-archive .archive-description {
+  margin-bottom: 13px;
+}
+#view-molt .specimen-archive .colour-lab > p {
+  margin: 3px 0 13px !important;
+}
+/* Maintain the familiar functional button treatments and active states. */
+#view-molt .specimen-archive .orbit-button {
+  margin: 10px 0 12px !important;
+}
+#view-molt .specimen-archive .ink-pickers {
+  margin-top: 11px !important;
+  padding-top: 10px !important;
+}
+#view-molt .specimen-archive .lab-actions {
+  margin-top: 8px !important;
+}
+@media (max-width: 1150px) and (min-width: 801px) {
+  #view-molt .specimen-archive .card-notation { display: none; }
+}
+@media (max-width: 800px) {
+  #view-molt .specimen-archive .specimen-card,
+  #view-molt .specimen-archive .specimen-card--form,
+  #view-molt .specimen-archive .specimen-card--pigment,
+  #view-molt .specimen-archive .specimen-card--archive {
+    padding: 18px 0 21px !important;
+  }
+}
+
+
+/* ================================================================
+   ECDYSIS V44 — 80% archive panel width; wider, undistorted specimen.
+   The same stage height is assigned to both columns; panel scroll stays.
+   ================================================================ */
+@media (min-width:801px) {
+  #view-molt .lab-layout {
+    --archive-width: clamp(280px, 25.2vw, 396px);
+    --wide-stage-height: min(
+      calc(100dvh - 96px),
+      calc((100vw - var(--archive-width)) * .94)
+    );
+    width:100% !important;
+    max-width:none !important;
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) var(--archive-width) !important;
+    grid-template-rows:var(--wide-stage-height) !important;
+  }
+  #view-molt .lab-layout .canvas-stage,
+  #view-molt .lab-layout .control-panel {
+    height:var(--wide-stage-height) !important;
+    max-height:var(--wide-stage-height) !important;
+    min-height:0 !important;
+  }
+  #view-molt .lab-layout .control-panel {
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    scrollbar-width:thin;
+    overscroll-behavior-y:contain;
+    padding-left:clamp(12px,1.55vw,24px) !important;
+    padding-right:clamp(12px,1.55vw,24px) !important;
+  }
+  #view-molt .canvas-stage #canvas-2d,
+  #view-molt .canvas-stage #webgl-canvas {
+    width:100% !important;
+    height:100% !important;
+    object-fit:contain;
+  }
+  #view-molt .specimen-archive .cycle-readout {grid-template-columns:88px minmax(0,1fr);gap:9px;}
+  #view-molt .lab-layout .specimen-archive .dial {width:86px;}
+  #view-molt .lab-layout .specimen-archive .dial-center b {font-size:40px;}
+  #view-molt .specimen-archive .cycle-readout-copy .dial-legend {font-size:8px;}
+  #view-molt .specimen-archive .cycle-readout-copy .sequence-button {font-size:9px;min-height:36px;touch-action:manipulation;}
+  #view-molt .specimen-archive .lab-actions button {touch-action:manipulation;}
+  #view-molt .specimen-archive .specimen-card-heading h3 {font-size:clamp(11px,1vw,14px) !important;}
+}
+@media (max-width:800px){
+  #view-molt .lab-layout {grid-template-columns:1fr !important;grid-template-rows:auto auto !important;}
+  #view-molt .lab-layout .control-panel {height:auto!important;max-height:none!important;overflow-y:visible!important;}
+}
+
+
+/* ================================================================
+   ECDYSIS V45 — MID-WIDTH CHAMBER / OPTICALLY CENTERED DIAL
+   Rebalance between V43 (31.5vw) and V44 (25.2vw) without changing
+   the specimen projection, canvas aspect math or recording pipeline.
+   ================================================================ */
+@media (min-width: 801px) {
+  #view-molt .lab-layout {
+    /* Exact midpoint of V43/V44 panel widths, including min/max. */
+    --archive-width: clamp(315px, 28.35vw, 446px);
+    --wide-stage-height: min(
+      calc(100dvh - 96px),
+      calc((100vw - var(--archive-width)) * .94)
+    );
+    grid-template-columns: minmax(0, 1fr) var(--archive-width) !important;
+    grid-template-rows: var(--wide-stage-height) !important;
+  }
+  #view-molt .lab-layout .canvas-stage,
+  #view-molt .lab-layout .control-panel {
+    height: var(--wide-stage-height) !important;
+    max-height: var(--wide-stage-height) !important;
+  }
+  #view-molt .lab-layout .control-panel {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+}
+/* Compensate for the Gothic display font's visually low ink baseline.
+   Keep the circle/SVG centred while adjusting only the actual numerals. */
+#view-molt .lab-layout .specimen-archive .dial-center b {
+  display: block;
+  line-height: 1;
+  margin: 0;
+  transform: translateY(-0.11em);
+}
+/* Larger, evenly sized tap targets in the COCOON / HATCH / MOLT rail. */
+#view-molt .lab-layout .specimen-archive .stage-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 4px 0 2px;
+}
+#view-molt .lab-layout .specimen-archive .stage-buttons button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 4px !important;
+  font-size: 11px !important;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: .035em;
+  border-bottom-width: 2px;
+  touch-action: manipulation;
+}
+@media (max-width: 800px) {
+  #view-molt .lab-layout .specimen-archive .stage-buttons button {
+    min-height: 46px;
+  }
+}
+
+
+/* ECDYSIS V46 — same outer chamber width, 1.4x horizontal breathing room.
+   The canvas and archive share the prior V45 geometry; only the inner
+   desktop padding changes. Mobile keeps its existing responsive padding. */
+@media (min-width: 801px) {
+  #view-molt .lab-layout .control-panel {
+    padding-left: clamp(17px, 2.17vw, 34px) !important;
+    padding-right: clamp(17px, 2.17vw, 34px) !important;
+  }
+}
+
+
+/* ================================================================
+   ECDYSIS V47 — SPACING / PALETTE / ORBIT / FRAME ALIGNMENT
+   V46 image proportions and the PNG/LOG export pipeline are unchanged.
+   ================================================================ */
+@media (min-width: 801px) {
+  #view-molt .lab-layout {
+    /* 8% wider than V46's 28.35vw archive width; same inner breathing room. */
+    --archive-width: clamp(340.2px, 30.618vw, 481.68px);
+    --wide-stage-height: min(
+      calc(100dvh - 96px),
+      calc((100vw - var(--archive-width)) * .94)
+    );
+    grid-template-columns: minmax(0, 1fr) var(--archive-width) !important;
+    grid-template-rows: var(--wide-stage-height) !important;
+  }
+  #view-molt .lab-layout .canvas-stage,
+  #view-molt .lab-layout .control-panel {
+    height: var(--wide-stage-height) !important;
+    max-height: var(--wide-stage-height) !important;
+    min-height: 0 !important;
+  }
+  /* Keep V46 panel padding (1.4x the original) exactly as it was. */
+  #view-molt .lab-layout .control-panel {
+    padding-left: clamp(17px, 2.17vw, 34px) !important;
+    padding-right: clamp(17px, 2.17vw, 34px) !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* V48: ORIGIN is a real palette swatch again, not an image preview. */
+#view-molt .specimen-archive .swatch-origin {
+  background-color: transparent;
+  background-image: linear-gradient(90deg, #3f8d80, #8fa7a0, #7a1f41);
+  background-size: 100% 100%;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+/* Three presets per row; preserve all six options and selected state. */
+#view-molt .specimen-archive .palette-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 7px 11px !important;
+}
+#view-molt .specimen-archive .palette {
+  min-width: 0;
+  min-height: 61px !important;
+  font: 10px/1.25 var(--mono) !important;
+  letter-spacing: .025em;
+  padding: 6px 3px 8px;
+  text-align: left;
+}
+#view-molt .specimen-archive .swatch {height: 25px !important;}
+
+/* Remove the smaller duplicate SPECIMEN FORM / 2D 3D caption entirely. */
+#view-molt .specimen-archive .v7-dim-heading {display: none !important;}
+#view-molt .specimen-archive .v7-dimension {padding-top: 0 !important;}
+
+/* Form title, orbit title and phase tabs share identical mono type DNA. */
+#view-molt .specimen-archive .orbit-copy strong {
+  font-family: var(--mono);
+  font-size: clamp(13px, 1vw, 15px);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: .05em;
+}
+#view-molt .specimen-archive .stage-buttons button {
+  font-family: var(--mono) !important;
+  font-size: clamp(12px, .95vw, 14px) !important;
+  font-weight: 500 !important;
+  letter-spacing: .05em;
+}
+#view-molt .specimen-archive .v7-dim-buttons button {
+  min-height: 48px !important;
+  padding: 12px 5px !important;
+  font-size: 11px !important;
+  line-height: 1.25;
+}
+#view-molt .specimen-archive .slider-row > span:first-child {
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: .025em;
+}
+#view-molt .specimen-archive .slider-row output {font-size: 10px;}
+
+/* Frame and all four corners of information share one horizontal gutter.
+   The vertical clearance accounts for the large bottom-right numerals. */
+#view-molt .canvas-stage {
+  --frame-x: clamp(32px, 5.5%, 78px);
+  --frame-y: clamp(84px, 10%, 96px);
+}
+#view-molt .canvas-stage::before {
+  inset: var(--frame-y) var(--frame-x) !important;
+}
+#view-molt .canvas-stage .canvas-top,
+#view-molt .canvas-stage .canvas-bottom {
+  left: var(--frame-x) !important;
+  right: var(--frame-x) !important;
+  gap: 14px;
+}
+#view-molt .canvas-stage .canvas-top {top: 27px !important;}
+#view-molt .canvas-stage .canvas-bottom {bottom: 23px !important;}
+#view-molt .canvas-stage .canvas-bottom strong {
+  font-size: clamp(42px, 3.55vw, 54px);
+  line-height: .95;
+}
+#view-molt .canvas-stage .canvas-bottom strong span {font-size: 18px;}
+#view-molt .canvas-stage[data-dimension="2d"] .canvas-gesture-hint {
+  display: none !important;
+}
+@media (max-width: 800px) {
+  #view-molt .specimen-archive .v7-dim-buttons button {min-height: 49px !important;}
+  #view-molt .specimen-archive .palette {font-size: 10px !important;}
+  #view-molt .canvas-stage {--frame-x: 6%;--frame-y: clamp(62px, 13%, 83px);}
+  #view-molt .canvas-stage .canvas-bottom strong {font-size: 44px;}
+}
+
+
+/* ================================================================
+   V49 — DIRECT PHASE SELECTION AND PIGMENT HABITAT
+   Stage names are actionable jump controls, not a contents list.
+   The backdrop chooser belongs immediately above the ink presets.
+   ================================================================ */
+#view-molt .specimen-archive .phase-direct-control {
+  padding-top: 11px;
+}
+#view-molt .specimen-archive .phase-direct-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  color: #987a73;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .065em;
+  margin-bottom: 8px;
+}
+#view-molt .specimen-archive .phase-direct-caption span:last-child {
+  text-align: right;
+  opacity: .78;
+}
+#view-molt .lab-layout .specimen-archive .phase-direct-control .stage-buttons {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 0 !important;
+}
+/* V51 / ARCHIVE INDEX: refined editorial tabs, no rectangular frames. */
+#view-molt .lab-layout .specimen-archive .phase-direct-control .stage-buttons button {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  text-align: left !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  min-height: 42px !important;
+  padding: 4px 7px 7px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(114, 9, 42, .25) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #967b7a !important;
+  box-shadow: none !important;
+  transition: color .18s, border-color .18s;
+}
+#view-molt .lab-layout .specimen-archive .phase-direct-control .stage-buttons button:hover:not(.selected) {
+  border-color: #72092a !important;
+  background: transparent !important;
+  color: #72092a !important;
+}
+#view-molt .lab-layout .specimen-archive .phase-direct-control .stage-buttons button.selected {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 2px solid #72092a !important;
+  color: #72092a !important;
+}
+#view-molt .specimen-archive .phase-index {
+  font: 9px/1.1 var(--mono);
+  letter-spacing: .05em;
+  opacity: .62;
+}
+#view-molt .specimen-archive .phase-name {
+  font: 500 clamp(11px, .84vw, 13px)/1.2 var(--mono);
+  letter-spacing: .02em;
+}
+#view-molt .specimen-archive .stage-buttons button:focus-visible {
+  outline: 2px solid #72092a;
+  outline-offset: 3px;
+}
+/* No separator below the CHROMATIC METABOLISM description. */
+#view-molt .specimen-archive .pigment-habitat {
+  border-top: 0 !important;
+  margin: 8px 0 12px;
+  padding-top: 0;
+}
+/* Keep pigment presets clear without a horizontal rule beneath the copy. */
+#view-molt .specimen-archive .colour-lab .palette,
+#view-molt .specimen-archive .colour-lab .palette.active,
+#view-molt .specimen-archive .colour-lab .palette:hover {
+  border-top: 0 !important;
+}
+#view-molt .specimen-archive .colour-lab .palette.active {
+  background: rgba(114, 9, 42, .06);
+}
+#view-molt .lab-layout .specimen-archive .pigment-habitat .backdrop-control {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+#view-molt .lab-layout .specimen-archive .pigment-habitat .backdrop-heading {
+  margin-bottom: 8px !important;
+  font-size: 9px;
+}
+#view-molt .lab-layout .specimen-archive .pigment-habitat .backdrop-buttons button {
+  min-height: 37px;
+}
+@media (max-width: 800px) {
+  #view-molt .lab-layout .specimen-archive .phase-direct-control .stage-buttons button {
+    min-height: 44px !important;
+    padding-top: 6px !important;
+    padding-bottom: 8px !important;
+  }
+}
+
+
+/* =============================================================
+   V52 — GOTHIC ULTRA OT ARCHIVE TABS + SPACING REFINEMENTS
+   Stage buttons remain clickable and navigate to 0 / 50 / 100.
+   ============================================================= */
+#view-molt .lab-layout .specimen-archive .phase-direct-control .stage-buttons button {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  gap: 0 !important;
+  min-height: 42px !important;
+  padding: 7px 3px 10px !important;
+  font-family: var(--gothic) !important;
+  font-weight: 400 !important;
+}
+#view-molt .lab-layout .specimen-archive .phase-direct-control .stage-buttons .phase-name {
+  display: block;
+  width: 100%;
+  font-family: var(--gothic) !important;
+  font-weight: 400 !important;
+  font-size: clamp(16px, 1.27vw, 19px) !important;
+  line-height: 1.15 !important;
+  letter-spacing: .025em !important;
+  text-align: center !important;
+}
+/* Delete the grey rule directly above DYE A / DYE B. */
+#view-molt .specimen-archive .ink-pickers {
+  border-top: 0 !important;
+}
+/* Double the gap between the HABITAT colour buttons and the ink chips. */
+#view-molt .specimen-archive .pigment-habitat {
+  margin-bottom: 24px !important;
+}
+@media (max-width: 800px) {
+  #view-molt .lab-layout .specimen-archive .phase-direct-control .stage-buttons button {
+    min-height: 44px !important;
+    padding: 8px 3px 10px !important;
+  }
+}
+
+/* ================================================================
+   ECDYSIS V53 — pigment microspacing, key swatches and typography
+   This changes only the interface; specimen colours/rendering are intact.
+   ================================================================ */
+/* DYE A/B: halve the gap above the row (formerly 11px + 10px). */
+#view-molt .lab-layout .specimen-archive .ink-pickers {
+  margin-top: 5.5px !important;
+  padding-top: 5px !important;
+  border-top: 0 !important;
+}
+/* Double the gap from DYE A/B to the saturation slider (9px -> 18px). */
+#view-molt .lab-layout .specimen-archive .ink-pickers + .sliders {
+  margin-top: 18px !important;
+}
+/* Fine division halfway between HABITAT buttons and the pigment chips. */
+#view-molt .specimen-archive .pigment-habitat {
+  position: relative;
+  margin-bottom: 24px !important;
+}
+#view-molt .specimen-archive .pigment-habitat::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -12px;
+  height: 1px;
+  background: rgba(114, 9, 42, .23);
+  pointer-events: none;
+}
+/* IMPRINT — centre the title, without the export arrow. */
+#view-molt .specimen-archive #export-png {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+/* Swatch keys only: continuous greyscale and user-specified six-stop ORIGIN. */
+#view-molt .specimen-archive .swatch-monotone {
+  background-image: linear-gradient(90deg, #000000 0%, #ffffff 100%) !important;
+  background-color: transparent;
+}
+#view-molt .specimen-archive .swatch-origin {
+  background-image: linear-gradient(90deg, #178963 0%, #675b3f 20%, #89443d 40%, #701e28 60%, #6e1d59 80%, #2d3257 100%);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+/* Match the Gothic Ultra OT type used by the transformation tabs. */
+#view-molt .specimen-archive .orbit-copy strong {
+  font-family: var(--gothic) !important;
+  font-weight: 400 !important;
+  font-size: clamp(18px, 1.35vw, 22px) !important;
+  line-height: 1.12 !important;
+  letter-spacing: .025em !important;
+}
+
+
+/* ============================================================
+   ECDYSIS V54: editorial-weight control labels, uninterrupted
+   HABITAT-to-palette whitespace. No control logic is changed.
+   ============================================================ */
+#view-molt .lab-layout .specimen-archive .slider-row > span:first-child {
+  font-weight: 400 !important;
+}
+/* The visual rule is removed; the V53 24px spacing remains unchanged. */
+#view-molt .specimen-archive .pigment-habitat::after {
+  content: none !important;
+  display: none !important;
+}
+
 </style>
-  <link rel="stylesheet" href="styles.css?v=39" />
+  <link rel="stylesheet" href="styles.css?v=54" />
   <!-- V30: One stable intro source; animation starts only after ink and type are ready. -->
   <style id="ecdysis-intro-stability-v30">
     #intro .intro-image {
@@ -1306,20 +2150,49 @@ body > .footer #replay-intro {
 
     <section class="view" id="view-molt" hidden aria-label="MOLT interactive laboratory">
       <div class="lab-layout">
-        <section class="canvas-stage" aria-label="3D metamorphosis specimen"><canvas id="webgl-canvas" aria-label="Interactive 3D OBJ specimen"></canvas><div class="canvas-top micro"><span id="geometry-status">CHECKING 3D FORMS...</span><span>DRAG: ROTATE / SCROLL: ZOOM</span></div><div class="canvas-bottom"><span class="micro" id="stage-state">COCOON / ORIGIN</span><strong class="gothic" id="stage-counter">00<span>%</span></strong></div><div class="canvas-warning micro" id="canvas-warning" hidden>2D PREVIEW / WEBGL2 NOT AVAILABLE</div></section>
-        <aside class="control-panel" aria-label="MOLT experiment controls">
-          <div class="console-top micro"><span>[ MEMORY MUTATION CONSOLE ]</span><button id="reset-all" type="button">RESET &#x21BA;</button></div>
-          
-          <div id="progress-dial" class="dial" role="slider" tabindex="0" aria-label="Transformation index" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><svg viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="82" class="dial-track"/><circle cx="100" cy="100" r="82" class="dial-fill" id="dial-arc"/></svg><div class="dial-center"><b class="gothic" id="dial-number">00</b><span class="micro">PERCENT</span></div></div>
-          <div class="micro dial-legend"><span>COCOON &#x2192; MOLT</span><span>DRAG / SCRUB</span></div><button id="play-sequence" class="sequence-button" type="button" aria-pressed="false">&#x25B6; PLAY SEQUENCE</button>
-          <input id="progress-range" class="range-long" type="range" min="0" max="100" step="1" value="0" aria-label="Transformation percent" />
-          <div class="stage-buttons"><button class="selected" data-stage="0" type="button">COCOON</button><button data-stage="1" type="button">HATCH</button><button data-stage="2" type="button">MOLT</button></div>
-          <div class="control-rule micro"><span>GEOMETRY</span><span>01 / MESH</span></div>
-          <div class="mode-buttons"><button class="active" data-mode="surface" type="button">SURFACE</button><button data-mode="wire" type="button">WIREFRAME</button></div>
-          <div class="sliders"><label class="slider-row"><span>MODIFICATION</span><output id="out-modification">0.00</output><input data-param="modification" type="range" min="0" max="1" step="0.01" value="0"/></label><label class="slider-row"><span>SPECIMEN SCALE</span><output id="out-scale">1.00</output><input data-param="scale" type="range" min="0.5" max="1.65" step="0.01" value="1" /></label></div>
-          <section class="colour-lab"><div class="control-rule micro"><span>CHROMATIC LAB / PIGMENT</span><span>02 / INK</span></div><p>Recolour the fibres without losing the memory of their original structure.</p><div class="palette-list" role="group" aria-label="Colour presets"><button class="palette active" data-palette="origin" type="button"><i class="swatch swatch-origin"></i>ORIGIN</button><button class="palette" data-palette="shell" type="button"><i class="swatch swatch-shell"></i>SHELL</button><button class="palette" data-palette="mint" type="button"><i class="swatch swatch-mint"></i>SEA GLASS</button><button class="palette" data-palette="prism" type="button"><i class="swatch swatch-prism"></i>PRISM</button><button class="palette" data-palette="monotone" type="button"><i class="swatch swatch-monotone"></i>MONOTONE</button><button class="palette" data-palette="custom" type="button"><i class="swatch swatch-custom"></i>CUSTOM</button></div><div class="ink-pickers"><label>INK A <input id="color-a" type="color" value="#599782" /></label><label>INK B <input id="color-b" type="color" value="#72092a" /></label><span class="micro">SELECT &#x2192; CUSTOM</span></div><div class="sliders"><label class="slider-row"><span>SPECTRAL INTENSITY</span><output id="out-intensity">0.60</output><input data-param="intensity" type="range" min="0" max="1" step="0.01" value="0.6" /></label><label class="slider-row"><span>HUE DRIFT</span><output id="out-hue">0</output><input data-param="hue" type="range" min="-180" max="180" step="1" value="0" /></label></div></section>
-          <button id="toggle-rotate" class="orbit-button" type="button" aria-pressed="false"><span class="orbit-symbol" aria-hidden="true">&#x25CE;</span><span class="orbit-copy"><strong>ORBIT</strong><small id="orbit-state">PAUSED / CLICK TO ROTATE</small></span><span class="orbit-pill" id="orbit-pill">OFF</span></button>
-          <div class="lab-actions"><div class="export-wrap" id="export-wrap"><button id="export-png" class="export-main" type="button" aria-haspopup="true" aria-expanded="false">CAPTURE &#x2197;</button><div class="export-options" id="export-options"><button data-export="transparent" type="button">TRANSPARENT &#x2197;</button><button data-export="background" type="button">BACKGROUND &#x2197;</button></div></div><div class="log-unit"><button id="log-toggle" class="log-button" type="button" aria-pressed="false" aria-label="Start or stop motion recording"><span class="log-dot" aria-hidden="true"></span><span id="log-label">LOG</span></button></div></div>
+        <section class="canvas-stage" aria-label="3D metamorphosis specimen"><canvas id="webgl-canvas" aria-label="Interactive 3D OBJ specimen"></canvas><div class="canvas-top micro"><span id="geometry-status">CHECKING 3D FORMS...</span><span class="canvas-gesture-hint">DRAG: ROTATE / SCROLL: ZOOM</span></div><div class="canvas-bottom"><span class="micro" id="stage-state">COCOON / ORIGIN</span><strong class="gothic" id="stage-counter">00<span>%</span></strong></div><div class="canvas-warning micro" id="canvas-warning" hidden>2D PREVIEW / WEBGL2 NOT AVAILABLE</div></section>
+        <aside class="control-panel specimen-archive" aria-label="ECDYSIS Chamber specimen controls">
+          <div class="console-top micro chamber-bar"><span>[ ECDYSIS CHAMBER ]</span><button id="reset-all" type="button">RESET &#x21BA;</button></div>
+
+          <section class="chamber-cycle" aria-label="Transformation cycle">
+            <div class="chamber-cycle-title micro"><span>CONTINUITY / TRANSFORMATION</span><span>03 / PHASES</span></div>
+            <div class="cycle-readout">
+              <div id="progress-dial" class="dial" role="slider" tabindex="0" aria-label="Transformation index" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><svg viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="82" class="dial-track"/><circle cx="100" cy="100" r="82" class="dial-fill" id="dial-arc"/></svg><div class="dial-center"><b class="gothic" id="dial-number">00</b></div></div>
+              <div class="cycle-readout-copy"><div class="micro dial-legend"><span>COCOON &#x2192; MOLT</span><span>DRAG / SCRUB</span></div><button id="play-sequence" class="sequence-button" type="button" aria-pressed="false">&#x25B6; UNFOLD CYCLE</button></div>
+            </div>
+            <input id="progress-range" class="range-long" type="range" min="0" max="100" step="1" value="0" aria-label="Transformation percent" />
+            <div class="phase-direct-control" role="group" aria-label="Choose a transformation phase">
+              <div class="stage-buttons">
+                <button class="selected" data-stage="0" type="button" aria-pressed="true" aria-label="Jump to COCOON, zero percent"><span class="phase-name">COCOON</span></button>
+                <button data-stage="1" type="button" aria-pressed="false" aria-label="Jump to HATCH, fifty percent"><span class="phase-name">HATCH</span></button>
+                <button data-stage="2" type="button" aria-pressed="false" aria-label="Jump to MOLT, one hundred percent"><span class="phase-name">MOLT</span></button>
+              </div>
+            </div>
+          </section>
+
+          <section class="specimen-card specimen-card--form" aria-label="Specimen form and morphology">
+            <header class="specimen-card-heading"><div><span class="card-serial micro">01 / FORM</span><h3>SPECIMEN FORM</h3></div><span class="card-notation micro">OBSERVE / REVOLVE</span></header>
+            <div id="dimension-mount"></div>
+            <div id="orbit-mount"><button id="toggle-rotate" class="orbit-button" type="button" aria-pressed="false"><span class="orbit-symbol" aria-hidden="true">&#x25CE;</span><span class="orbit-copy"><strong>ORBIT</strong><small id="orbit-state">PAUSED / CLICK TO ORBIT</small></span><span class="orbit-pill" id="orbit-pill">OFF</span></button></div>
+            <div class="archive-divider"><span class="micro">MORPHOLOGY</span><span class="micro">STRUCTURE / FORM</span></div>
+            <div class="mode-buttons"><button class="active" data-mode="surface" type="button">SURFACE</button><button data-mode="wire" type="button">WIREFRAME</button></div>
+            <div class="sliders"><label class="slider-row"><span>DEFORMATION</span><output id="out-modification">0.00</output><input data-param="modification" type="range" min="0" max="1" step="0.01" value="0"/></label><label class="slider-row"><span>MAGNITUDE</span><output id="out-scale">1.30</output><input data-param="scale" type="range" min="0.5" max="1.65" step="0.01" value="1.3" /></label></div>
+          </section>
+
+          <section class="specimen-card specimen-card--pigment colour-lab" aria-label="Pigment lab">
+            <header class="specimen-card-heading"><div><span class="card-serial micro">02 / PIGMENT</span><h3>CHROMATIC METABOLISM</h3></div><span class="card-notation micro">COLOUR / TRACE</span></header>
+            <p>Recolour the fibres without losing the memory of their original structure.</p>
+            <div id="habitat-mount" class="pigment-habitat"></div>
+            <div class="palette-list" role="group" aria-label="Colour presets"><button class="palette active" data-palette="origin" type="button"><i class="swatch swatch-origin"></i>ORIGIN</button><button class="palette" data-palette="shell" type="button"><i class="swatch swatch-shell"></i>SHELL</button><button class="palette" data-palette="mint" type="button"><i class="swatch swatch-mint"></i>SEA GLASS</button><button class="palette" data-palette="prism" type="button"><i class="swatch swatch-prism"></i>PRISM</button><button class="palette" data-palette="monotone" type="button"><i class="swatch swatch-monotone"></i>MONOTONE</button><button class="palette" data-palette="custom" type="button"><i class="swatch swatch-custom"></i>CUSTOM</button></div>
+            <div class="ink-pickers"><label>DYE A <input id="color-a" type="color" value="#599782" /></label><label>DYE B <input id="color-b" type="color" value="#72092a" /></label><span class="micro">SELECT &#x2192; CUSTOM</span></div>
+            <div class="sliders"><label class="slider-row"><span>PIGMENT SATURATION</span><output id="out-intensity">0.60</output><input data-param="intensity" type="range" min="0" max="1" step="0.01" value="0.6" /></label><label class="slider-row"><span>PIGMENT PHASE</span><output id="out-hue">0</output><input data-param="hue" type="range" min="-180" max="180" step="1" value="0" /></label></div>
+          </section>
+
+          <section class="specimen-card specimen-card--archive" aria-label="Memory output archive">
+            <header class="specimen-card-heading"><div><span class="card-serial micro">03 / ARCHIVE</span><h3>TRACE RECORD</h3></div><span class="card-notation micro">STILL / MOTION</span></header>
+            <p class="archive-description">Preserve a single imprint or document a moving transformation.</p>
+            <div class="lab-actions"><div class="export-wrap" id="export-wrap"><button id="export-png" class="export-main" type="button" aria-haspopup="true" aria-expanded="false">IMPRINT</button><div class="export-options" id="export-options"><button data-export="transparent" type="button">TRANSPARENT &#x2197;</button><button data-export="background" type="button">BACKGROUND &#x2197;</button></div></div><div class="log-unit"><button id="log-toggle" class="log-button" type="button" aria-pressed="false" aria-label="Start or stop motion recording"><span class="log-dot" aria-hidden="true"></span><span id="log-label">MOTION ARCHIVE</span></button></div></div>
+          </section>
         </aside>
       </div>
       <!-- V31: Keep the interactive canvas and controls first. The full MOLT heading follows below. -->
@@ -1358,7 +2231,7 @@ body > .footer #replay-intro {
     })();
   </script>
   <script type="module">
-    import('./app.js?v=39').then(function () {
+    import('./app.js?v=58').then(function () {
       document.documentElement.dataset.ecdysisReady = 'true';
     }).catch(function (error) {
       console.error('[ECDYSIS] Application startup failed:', error);

@@ -1,5 +1,5 @@
 /* ECDYSIS V27 — independent 2D/3D scales (2D 1.30, 3D 0.75) */
-import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=39';
+import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=58';
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 const names=['COCOON','HATCH','MOLT'];
 const STAGE_COUNT=names.length;
@@ -13,7 +13,7 @@ function toast(message){const el=$('#toast');if(!el)return;el.textContent=messag
 const getImage=url=>new Promise((resolve,reject)=>{const img=new Image();img.decoding='async';img.onload=()=>resolve(img);img.onerror=()=>reject(Error(url+' not found'));img.src=url;});
 
 /* Only small CSS for the separate dimension selector; all main styles stay in styles.css. */
-const dim=document.createElement('section');dim.className='v7-dimension';dim.innerHTML=`<div class="micro v7-dim-heading">DISPLAY DIMENSION <span>02 / VIEW</span></div><div class="v7-dim-buttons"><button class="active" type="button" data-dimension="2d" aria-pressed="true">2D / IMAGE</button><button type="button" data-dimension="3d" aria-pressed="false">3D / OBJ</button></div>`;
+const dim=document.createElement('section');dim.className='v7-dimension';dim.innerHTML=`<div class="v7-dim-buttons"><button class="active" type="button" data-dimension="2d" aria-pressed="true">IMPRINT / 2D</button><button type="button" data-dimension="3d" aria-pressed="false">EMBODIMENT / 3D</button></div>`;
 // Keep any legacy four-stage HTML compatible with the three-stage controller.
 $$('[data-stage]').forEach(button=>{
  if(Number(button.dataset.stage)>=STAGE_COUNT)button.remove();
@@ -22,19 +22,25 @@ const labLegend=$('.dial-legend span');
 if(labLegend)labLegend.textContent='COCOON → MOLT';
 const labHeading=$('#view-ecdysis .lab-heading .topline span:last-child');
 if(labHeading)labHeading.textContent='THREE SKINS / THREE BODIES';
-$('.stage-buttons')?.insertAdjacentElement('afterend',dim);
+const dimensionMount=$('#dimension-mount');
+if(dimensionMount) dimensionMount.appendChild(dim);
+else $('.stage-buttons')?.insertAdjacentElement('afterend',dim);
 /* ECDYSIS V21 — independent canvas backdrop selector; does not alter artwork. */
 const backdropControl=document.createElement('section');
 backdropControl.className='backdrop-control';
 backdropControl.setAttribute('role','group');
 backdropControl.setAttribute('aria-label','Image experiment background');
-backdropControl.innerHTML=`<div class="micro backdrop-heading"><span>SPECIMEN BACKGROUND</span><span>03 / CANVAS</span></div><div class="backdrop-buttons"><button type="button" data-backdrop-choice="beige" class="active" aria-pressed="true"><i class="backdrop-swatch backdrop-swatch-beige" aria-hidden="true"></i> BEIGE</button><button type="button" data-backdrop-choice="black" aria-pressed="false"><i class="backdrop-swatch backdrop-swatch-black" aria-hidden="true"></i> BLACK</button></div>`;
-dim.insertAdjacentElement('afterend',backdropControl);
+backdropControl.innerHTML=`<div class="micro backdrop-heading"><span>HABITAT</span><span>03 / GROUND</span></div><div class="backdrop-buttons"><button type="button" data-backdrop-choice="beige" class="active" aria-pressed="true"><i class="backdrop-swatch backdrop-swatch-beige" aria-hidden="true"></i> SAND / BEIGE</button><button type="button" data-backdrop-choice="black" aria-pressed="false"><i class="backdrop-swatch backdrop-swatch-black" aria-hidden="true"></i> VOID / BLACK</button></div>`;
+const habitatMount=$('#habitat-mount');
+if(habitatMount) habitatMount.appendChild(backdropControl);
+else dim.insertAdjacentElement('afterend',backdropControl);
 // V35: the ORBIT control belongs directly below DISPLAY DIMENSION.
 const orbitControl=$('#toggle-rotate');
-if(orbitControl)dim.insertAdjacentElement('afterend',orbitControl);
+if(orbitControl){const orbitMount=$('#orbit-mount');if(orbitMount)orbitMount.appendChild(orbitControl);else dim.insertAdjacentElement('afterend',orbitControl);}
 const modeBackgrounds={'2d':'beige','3d':'black'};
 const modeOrbits={'2d':false,'3d':true};
+const specimenStage=$('#view-molt .canvas-stage');
+if(specimenStage)specimenStage.dataset.dimension=dimension;
 let canvasBackground='beige';
 function setCanvasBackground(selection){
  canvasBackground=selection==='black'?'black':'beige';
@@ -134,6 +140,7 @@ async function loadPictures() {
     try {
       const picture = await getImage(`assets/${filename}`);
       pics[i] = picture;
+      if(dimension==='2d')syncOriginSwatch(Math.min(STAGE_COUNT-1,Math.round(state.progress/100*(STAGE_COUNT-1))));
       loaded++;
       twoD?.setImage(i, picture);
       console.info(`[ECDYSIS] 2D ${names[i]} -> ${filename}`);
@@ -172,6 +179,7 @@ async function load3DTexture() {
   for (const filename of ['cocoon7.png', 'cocoon7-ink.png']) {
     try {
       texture3D = await getImage(`assets/${filename}`);
+      if(dimension==='3d')syncOriginSwatch(Math.min(STAGE_COUNT-1,Math.round(state.progress/100*(STAGE_COUNT-1))));
       console.info(`[ECDYSIS] 3D surface artwork -> ${filename}`);
       apply3DTexture();
       return;
@@ -220,8 +228,11 @@ async function init3D(){
       return false;
     }
   }
+  // V46: before uploading the shared atlas or rendering any loaded OBJ,
+  // initialise the viewer at the currently selected phase. This prevents
+  // a one-frame default-COCOON flash on first switching from 2D to 3D.
+  Object.assign(threeD.params,state,{scale:dimensionScales['3d']});
   apply3DTexture();
-  Object.assign(threeD.params,state);
   threeD.resize();
   $('#geometry-status').textContent = '3D / ' + backend.toUpperCase() + ' — LOADING';
   if(!modelsLoading) modelsLoading = loadModels().catch(err=> {
@@ -258,6 +269,9 @@ async function changeDimension(to){
  // Remember the viewer-adjusted slider value before switching modes.
  dimensionScales[dimension]=state.scale;
  if(to==='3d'){
+  // Make the existing 3D surface reflect the selected phase before revealing
+  // it; it must never temporarily display a stale/default COCOON frame.
+  if(threeD) threeD.setParams({...state,scale:dimensionScales['3d']});
   canvas3D.style.display='block'; canvas2D.style.display='none';
   if(!await init3D()){
    canvas3D.style.display='none'; canvas2D.style.display='block';
@@ -276,6 +290,7 @@ async function changeDimension(to){
  }
  state.scale=dimensionScales[dimension];
  state.rotate=modeOrbits[dimension];
+ if(specimenStage)specimenStage.dataset.dimension=dimension;
  setCanvasBackground(modeBackgrounds[dimension]);
  threeD?.setInteractiveMode?.(dimension==='3d' && state.rotate);
  $('#geometry-status').textContent=dimension==='2d'
@@ -293,7 +308,17 @@ async function changeDimension(to){
 $$('[data-dimension]').forEach(b=>b.addEventListener('click',()=>void changeDimension(b.dataset.dimension)));
 
 function setProgress(v){state.progress=Math.min(100,Math.max(0,Math.round(Number(v)||0)));updateUI();render();}
-function updateUI(){const p=state.progress,phase=Math.min(STAGE_COUNT-1,Math.round(p/100*(STAGE_COUNT-1)));$('#progress-range').value=p;if($('#progress-readout'))$('#progress-readout').textContent=p+'%';$('#dial-number').textContent=String(p).padStart(2,'0');$('#dial-arc').style.strokeDashoffset=515.22*(1-p/100);$('#progress-dial').setAttribute('aria-valuenow',String(p));$('#stage-counter').innerHTML=String(p).padStart(2,'0')+'<span>%</span>';$('#stage-state').textContent=names[phase]+' / '+['ORIGIN','OPENING','SHEDDING'][phase];$$('[data-stage]').forEach((b,i)=>b.classList.toggle('selected',phase===i));$$('[data-param]').forEach(inp=>{const key=inp.dataset.param;inp.value=state[key];const out=$('#out-'+key);if(out)out.textContent=key==='hue'?String(state.hue):Number(state[key]).toFixed(2);});$$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.mode));$$('[data-palette]').forEach(b=>{const yes=b.dataset.palette===state.palette;b.classList.toggle('active',yes);b.setAttribute('aria-pressed',String(yes));});$('#color-a').value=state.inkA;$('#color-b').value=state.inkB;document.documentElement.style.setProperty('--a',state.inkA);document.documentElement.style.setProperty('--b',state.inkB);const orbit=$('#toggle-rotate');orbit.setAttribute('aria-pressed',String(state.rotate));$('#orbit-pill').textContent=state.rotate?'ON':'OFF';$('#orbit-state').textContent=state.rotate?'ACTIVE / CLICK TO PAUSE':'PAUSED / CLICK TO ROTATE';$('#play-sequence').textContent=playing?'Ⅱ PAUSE SEQUENCE':'▶ PLAY SEQUENCE';$('#play-sequence').classList.toggle('is-playing',playing);$('#play-sequence').setAttribute('aria-pressed',String(playing));}
+function syncOriginSwatch(_stageIndex){
+ // ORIGIN is a fixed six-colour reference key, not a stage-thumbnail.
+ // The actual original image and 3D pigment rendering remain unchanged.
+ const swatch=$('.swatch-origin');
+ if(!swatch)return;
+ swatch.style.backgroundImage='linear-gradient(90deg, #178963 0%, #675b3f 20%, #89443d 40%, #701e28 60%, #6e1d59 80%, #2d3257 100%)';
+ swatch.style.backgroundSize='100% 100%';
+ swatch.style.backgroundPosition='center';
+ swatch.style.backgroundRepeat='no-repeat';
+}
+function updateUI(){const p=state.progress,phase=Math.min(STAGE_COUNT-1,Math.round(p/100*(STAGE_COUNT-1)));$('#progress-range').value=p;if($('#progress-readout'))$('#progress-readout').textContent=p+'%';$('#dial-number').textContent=String(p).padStart(2,'0');$('#dial-arc').style.strokeDashoffset=515.22*(1-p/100);syncOriginSwatch(phase);$('#progress-dial').setAttribute('aria-valuenow',String(p));$('#stage-counter').innerHTML=String(p).padStart(2,'0')+'<span>%</span>';$('#stage-state').textContent=names[phase]+' / '+['ORIGIN','OPENING','SHEDDING'][phase];$$('[data-stage]').forEach((b,i)=>{const selected=phase===i;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});$$('[data-param]').forEach(inp=>{const key=inp.dataset.param;inp.value=state[key];const out=$('#out-'+key);if(out)out.textContent=key==='hue'?String(state.hue):Number(state[key]).toFixed(2);});$$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.mode));$$('[data-palette]').forEach(b=>{const yes=b.dataset.palette===state.palette;b.classList.toggle('active',yes);b.setAttribute('aria-pressed',String(yes));});$('#color-a').value=state.inkA;$('#color-b').value=state.inkB;document.documentElement.style.setProperty('--a',state.inkA);document.documentElement.style.setProperty('--b',state.inkB);const orbit=$('#toggle-rotate');orbit.setAttribute('aria-pressed',String(state.rotate));$('#orbit-pill').textContent=state.rotate?'ON':'OFF';$('#orbit-state').textContent=state.rotate?'ACTIVE / CLICK TO PAUSE':'PAUSED / CLICK TO ORBIT';$('#play-sequence').textContent=playing?'Ⅱ PAUSE CYCLE':'▶ UNFOLD CYCLE';$('#play-sequence').classList.toggle('is-playing',playing);$('#play-sequence').setAttribute('aria-pressed',String(playing));}
 const dial=$('#progress-dial');function pointDial(e){const r=dial.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;setProgress(Math.round(((Math.atan2(x,-y)+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*100));}
 dial.addEventListener('pointerdown',e=>{e.preventDefault();dial.setPointerCapture(e.pointerId);pointDial(e);});dial.addEventListener('pointermove',e=>{if(dial.hasPointerCapture(e.pointerId))pointDial(e);});dial.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;e.preventDefault();const dir=['ArrowLeft','ArrowDown'].includes(e.key)?-1:1;setProgress(e.key==='Home'?0:e.key==='End'?100:state.progress+dir*(e.shiftKey?10:1));});$('#progress-range').addEventListener('input',e=>setProgress(e.target.value));$$('[data-stage]').forEach((b,i)=>b.addEventListener('click',()=>setProgress(stageProgress(i))));
 /* Render just ONE visible canvas, with one animation frame for slider bursts. */
@@ -302,9 +327,24 @@ $$('[data-param]').forEach(inp=>inp.addEventListener('input',()=>{state[inp.data
 $$('[data-mode]').forEach(b=>b.addEventListener('click',()=>{state.mode=b.dataset.mode;updateUI();render();}));
 $$('[data-palette]').forEach(b=>b.addEventListener('click',()=>{state.palette=b.dataset.palette;updateUI();render();}));
 for(const [selector,key] of [['#color-a','inkA'],['#color-b','inkB']])$(selector).addEventListener('input',e=>{state[key]=e.target.value;state.palette='custom';updateUI();if(!inputRAF)inputRAF=requestAnimationFrame(()=>{inputRAF=0;render();});});
-$('#reset-all').addEventListener('click',()=>{playing=false;dimensionScales['2d']=1.3;dimensionScales['3d']=0.75;modeBackgrounds['2d']='beige';modeBackgrounds['3d']='black';modeOrbits['2d']=false;modeOrbits['3d']=true;state={...DEFAULT,scale:dimensionScales[dimension],rotate:modeOrbits[dimension]};if(twoD){twoD.zoom=1;twoD.angle=0;}if(threeD){threeD.zoom=1;threeD.yaw=-.38;threeD.pitch=.2;threeD.setInteractiveMode?.(dimension==='3d'&&state.rotate);}setCanvasBackground(modeBackgrounds[dimension]);updateUI();render();animate();toast('RESET / ORIGIN RESTORED');});
+$('#reset-all').addEventListener('click',()=>{playing=false;dimensionScales['2d']=1.3;dimensionScales['3d']=0.75;modeBackgrounds['2d']='beige';modeBackgrounds['3d']='black';modeOrbits['2d']=false;modeOrbits['3d']=true;state={...DEFAULT,scale:dimensionScales[dimension],rotate:modeOrbits[dimension]};if(twoD){twoD.zoom=1;twoD.angle=0;}if(threeD){threeD.zoom=1;threeD.yaw=0;threeD.pitch=0;threeD.setInteractiveMode?.(dimension==='3d'&&state.rotate);}setCanvasBackground(modeBackgrounds[dimension]);updateUI();render();animate();toast('RESET / ORIGIN RESTORED');});
 $('#toggle-rotate').addEventListener('click',()=>{state.rotate=!state.rotate;modeOrbits[dimension]=state.rotate;threeD?.setInteractiveMode?.(state.rotate&&dimension==='3d');updateUI();animate();});
-$('#play-sequence').addEventListener('click',()=>{playing=!playing;if(playing)playStart=performance.now()-state.progress/100*16000;updateUI();animate();});
+// UNFOLD CYCLE: pointerdown is immediate on mouse/touch, with click
+// fallback for keyboard. 100% restarts from the initial COCOON state.
+function toggleCycle(){
+ if(playing){playing=false;updateUI();return;}
+ if(state.progress>=100)setProgress(0);
+ playStart=performance.now()-state.progress/100*16000;
+ playing=true;updateUI();animate();
+}
+let lastCyclePointer=-Infinity;
+$('#play-sequence').addEventListener('pointerdown',e=>{
+ lastCyclePointer=performance.now();e.preventDefault();toggleCycle();
+});
+$('#play-sequence').addEventListener('click',()=>{
+ if(performance.now()-lastCyclePointer<500)return;
+ toggleCycle();
+});
 // 3D orbit is frame-rate independent; cap GPU work near 30fps instead of 60.
 let lastOrbitTime=0,lastOrbitPaint=0;
 function animate(){
@@ -338,7 +378,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&(playing|
 /* Export settings retained from V7. */
 const wrap=$('#export-wrap'),exportBtn=$('#export-png');function toggleMenu(open){wrap.classList.toggle('open',open);exportBtn.setAttribute('aria-expanded',String(open));}
 exportBtn.addEventListener('click',()=>toggleMenu(!wrap.classList.contains('open')));document.addEventListener('pointerdown',e=>{if(!wrap.contains(e.target))toggleMenu(false);});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleMenu(false);});
-async function exportPNG(kind){try{const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}const src=renderer.exportCanvas(),out=document.createElement('canvas');out.width=Math.min(2400,Math.max(1400,src.width));out.height=Math.round(out.width*src.height/src.width);const ctx=out.getContext('2d');if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';ctx.fillRect(0,0,out.width,out.height);}ctx.drawImage(src,0,0,out.width,out.height);if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';ctx.font=`${Math.round(out.width*.018)}px monospace`;ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);ctx.textAlign='right';ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);}const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`,file=new File([blob],filename,{type:'image/png'});if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('PNG EXPORTED');}catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}}
+async function exportPNG(kind){try{const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}const src=renderer.exportCanvas(),out=document.createElement('canvas');out.width=Math.min(2400,Math.max(1400,src.width));out.height=Math.round(out.width*src.height/src.width);const ctx=out.getContext('2d');if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';ctx.fillRect(0,0,out.width,out.height);}ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';drawExportSpecimen(ctx,src,0,0,out.width,out.height);if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';ctx.font=`${Math.round(out.width*.018)}px monospace`;ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);ctx.textAlign='right';ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);}const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`,file=new File([blob],filename,{type:'image/png'});if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('PNG EXPORTED');}catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}}
 $$('[data-export]').forEach(b=>b.addEventListener('click',()=>{toggleMenu(false);void exportPNG(b.dataset.export);}));
 
 /* ECDYSIS V33 / reliable motion LOG.
@@ -393,7 +433,7 @@ function setLogButton(stage){
  logBtn.disabled=stage==='processing';
  logBtn.classList.toggle('is-recording',stage==='recording');
  logBtn.setAttribute('aria-pressed',String(stage==='recording'));
- logLabel.textContent=stage==='processing'?'LOADING...':stage==='recording'?logClock(logSession?(performance.now()-logSession.start)/1000:0):'LOG';
+ logLabel.textContent=stage==='processing'?'LOADING...':stage==='recording'?logClock(logSession?(performance.now()-logSession.start)/1000:0):'MOTION ARCHIVE';
  logBtn.title=stage==='recording'?'Click again to stop recording':stage==='processing'?'Preparing GIF and MP4':'Start motion recording';
 }
 function updateLogClock(session){
@@ -407,6 +447,15 @@ function preferredMP4(){
  }
  return null;
 }
+/* V42: canvas export composition must NEVER stretch a specimen when its
+ * viewport changes from a square to a wide rectangle (or is resized mid-LOG).
+ * Use centered contain fitting for the current rendered canvas dimensions. */
+function drawExportSpecimen(ctx,source,x,y,width,height){
+ if(!source || source.width<=0 || source.height<=0)return;
+ const factor=Math.min(width/source.width,height/source.height);
+ const drawWidth=source.width*factor,drawHeight=source.height*factor;
+ ctx.drawImage(source,x+(width-drawWidth)/2,y+(height-drawHeight)/2,drawWidth,drawHeight);
+}
 function composeLogFrame(session,source){
  const {output,ctx}=session;
  const w=output.width,h=output.height;
@@ -414,7 +463,7 @@ function composeLogFrame(session,source){
  ctx.globalAlpha=1;
  ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';
  ctx.fillRect(0,0,w,h);
- if(source?.width>0 && source?.height>0)ctx.drawImage(source,0,0,w,h);
+ drawExportSpecimen(ctx,source,0,0,w,h);
 }
 function outputFile(blob,filename){
  const url=URL.createObjectURL(blob),link=document.createElement('a');
@@ -565,7 +614,7 @@ async function startLog(){
  try{
   const source=active().exportCanvas();
   if(!source?.width||!source?.height)throw Error('Image canvas is not ready');
-  const width=Math.max(2,2*Math.round(Math.min(960,source.width)/2));
+  const width=1440; // V44: high-definition MP4 canvas (GIF still uses GIF_WIDTH=960)
   const height=Math.max(2,2*Math.round(width*source.height/source.width/2));
   const output=document.createElement('canvas');output.width=width;output.height=height;
   const ctx=output.getContext('2d',{alpha:false});
@@ -586,14 +635,27 @@ async function startLog(){
   if(format&&typeof output.captureStream==='function'){
    try{
     session.stream=output.captureStream(LOG_FPS);
-    const recorder=new MediaRecorder(session.stream,{mimeType:format,videoBitsPerSecond:3800000});
+    // Safari encoders differ in supported bitrates. Try a quality ladder.
+    let recorder=null,actualBitrate=0;
+    for(const bps of [12000000,8500000,6000000]){
+      try{
+        const candidate=new MediaRecorder(session.stream,{mimeType:format,videoBitsPerSecond:bps});
+        const done=new Promise((resolve,reject)=>{
+          candidate.ondataavailable=e=>{if(e.data?.size)session.chunks.push(e.data);};
+          candidate.onstop=()=>resolve(new Blob(session.chunks,{type:'video/mp4'}));
+          candidate.onerror=e=>reject(Error(e.error?.message||'MP4 recorder failed'));
+        });
+        candidate.start(1000);
+        recorder=candidate;
+        session.recordDone=done;
+        actualBitrate=bps;
+        break;
+      }catch(error){console.warn('[ECDYSIS] MP4 bitrate not accepted:',bps,error);}
+    }
+    if(!recorder)throw Error('No supported MP4 bitrate');
+    console.info('[ECDYSIS] MP4 target: '+output.width+'x'+output.height+' / '+actualBitrate+'bps');
     session.recorder=recorder;
-    session.recordDone=new Promise((resolve,reject)=>{
-     recorder.ondataavailable=e=>{if(e.data?.size)session.chunks.push(e.data);};
-     recorder.onstop=()=>resolve(new Blob(session.chunks,{type:'video/mp4'}));
-     recorder.onerror=e=>reject(Error(e.error?.message||'MP4 recorder failed'));
-    });
-    recorder.start(1000);
+
    }catch(error){
     console.warn('[ECDYSIS] MP4 unavailable; GIF recording continues:',error);
     session.stream?.getTracks().forEach(track=>track.stop());
@@ -679,16 +741,20 @@ async function stopLog(){
   session.frames=[];logSession=null;setLogButton('idle');
  }
 }
+// Prioritize stop on pointerdown so the heavy GIF snapshot loop cannot eat
+// a touch/mouse click. Keep click as fallback for keyboard/assistive users.
+let lastLogPointerStop=-Infinity;
+logBtn.addEventListener('pointerdown',e=>{
+ if(logMode!=='recording'||!logSession)return;
+ lastLogPointerStop=performance.now();
+ e.preventDefault();
+ void stopLog();
+});
 logBtn.addEventListener('click',()=>{
+ if(performance.now()-lastLogPointerStop<500)return;
  if(logMode==='processing')return;
- if(logMode==='recording'){
-  // Ignore duplicate/synthetic clicks originating from the first press.
-  // A second deliberate click after 0.75 seconds ends the recording.
-  if(!logSession || performance.now()-logSession.start<750)return;
-  void stopLog();
- }else{
-  void startLog();
- }
+ if(logMode==='recording')void stopLog();
+ else void startLog();
 });
 $('#download-gif').addEventListener('click',()=>{if(logReady.gif)outputFile(logReady.gif,'ECDYSIS_LOG_'+Date.now()+'.gif');});
 $('#download-mp4').addEventListener('click',()=>{if(logReady.mp4)outputFile(logReady.mp4,'ECDYSIS_LOG_'+Date.now()+'.mp4');});
