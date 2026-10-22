@@ -1,10 +1,10 @@
 /* ECDYSIS V27 — independent 2D/3D scales (2D 1.30, 3D 0.75) */
-import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js';
+import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=39';
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 const names=['COCOON','HATCH','MOLT'];
 const STAGE_COUNT=names.length;
 const stageProgress=index=>Math.round(100*index/(STAGE_COUNT-1));
-const DEFAULT={progress:0,modification:0,scale:1.3,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.6,hue:0,mode:'surface',rotate:false};
+const DEFAULT={progress:0,modification:0,scale:1.3,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.6,hue:0,mode:'surface',rotate:false,monoWhite:0};
 const dimensionScales={ '2d':1.3, '3d':0.75 };
 let state={...DEFAULT},dimension='2d',twoD=null,threeD=null,playing=false,playStart=0,frameId=0,introTimer=0,introFade=0,toastTimer=0,modelsLoading=null;
 const pics=Array(STAGE_COUNT).fill(null);
@@ -20,7 +20,7 @@ $$('[data-stage]').forEach(button=>{
 });
 const labLegend=$('.dial-legend span');
 if(labLegend)labLegend.textContent='COCOON → MOLT';
-const labHeading=$('#view-molt .lab-heading .topline span:last-child');
+const labHeading=$('#view-ecdysis .lab-heading .topline span:last-child');
 if(labHeading)labHeading.textContent='THREE SKINS / THREE BODIES';
 $('.stage-buttons')?.insertAdjacentElement('afterend',dim);
 /* ECDYSIS V21 — independent canvas backdrop selector; does not alter artwork. */
@@ -30,9 +30,17 @@ backdropControl.setAttribute('role','group');
 backdropControl.setAttribute('aria-label','Image experiment background');
 backdropControl.innerHTML=`<div class="micro backdrop-heading"><span>SPECIMEN BACKGROUND</span><span>03 / CANVAS</span></div><div class="backdrop-buttons"><button type="button" data-backdrop-choice="beige" class="active" aria-pressed="true"><i class="backdrop-swatch backdrop-swatch-beige" aria-hidden="true"></i> BEIGE</button><button type="button" data-backdrop-choice="black" aria-pressed="false"><i class="backdrop-swatch backdrop-swatch-black" aria-hidden="true"></i> BLACK</button></div>`;
 dim.insertAdjacentElement('afterend',backdropControl);
+// V35: the ORBIT control belongs directly below DISPLAY DIMENSION.
+const orbitControl=$('#toggle-rotate');
+if(orbitControl)dim.insertAdjacentElement('afterend',orbitControl);
+const modeBackgrounds={'2d':'beige','3d':'black'};
+const modeOrbits={'2d':false,'3d':true};
 let canvasBackground='beige';
 function setCanvasBackground(selection){
  canvasBackground=selection==='black'?'black':'beige';
+ modeBackgrounds[dimension]=canvasBackground;
+ state.monoWhite=canvasBackground==='black'?1:0;
+ if(active())render();
  const stage=$('.canvas-stage');
  if(stage)stage.dataset.backdrop=canvasBackground;
  $$('[data-backdrop-choice]').forEach(button=>{
@@ -90,7 +98,13 @@ async function intro(){
  const fontReady=document.fonts?.load('64px "ECD Gothic"').catch(error=>{
   console.warn('[ECDYSIS] Intro font loading:',error);return [];
  })??Promise.resolve([]);
- await Promise.all([inkReady,fontReady]);
+ // Avoid an indefinitely blank intro when Safari delays an image decode or font.
+ // Readiness normally resolves immediately, but the opening always starts
+ // within 1.6 seconds even if an asset request stalls.
+ await Promise.race([
+  Promise.all([inkReady,fontReady]),
+  new Promise(resolve=>setTimeout(resolve,1600))
+ ]);
  if(run!==introRun||el.hidden)return;
  fitIntro();
  // A single forced style read gives replay a fresh animation timeline.
@@ -102,32 +116,13 @@ $('#intro-threads')?.remove();
 $('#intro-skip')?.addEventListener('click',closeIntro);
 $('#replay-intro')?.addEventListener('click',()=>{void intro();});
 window.addEventListener('resize',()=>{if($('#intro')?.classList.contains('intro-playing'))fitIntro();});
-
-/* Editor/hero image processing is independent from the intro image.
-   Only .processed-cocoon is updated; .intro-image stays cocoon7-ink.png. */
-async function introArt(){
- let img=null;
- for(const url of ['assets/cocoon7-ink.png','assets/cocoon7.png']){
-  try{img=await getImage(url);break;}catch{}
- }
- if(!img)return;
- const c=document.createElement('canvas');
- c.width=img.naturalWidth;c.height=img.naturalHeight;
- const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0);
- const data=ctx.getImageData(0,0,c.width,c.height);
- for(let i=0;i<data.data.length;i+=4){
-  const d=data.data,b=Math.max(d[i],d[i+1],d[i+2]);
-  d[i+3]=Math.round(d[i+3]*Math.min(1,Math.max(0,(b-7)/70)));
- }
- ctx.putImageData(data,0,0);
- const blob=await new Promise(resolve=>c.toBlob(resolve,'image/png'));
- if(blob){
-  const url=URL.createObjectURL(blob);
-  $$('.processed-cocoon').forEach(node=>node.src=url);
- }
-}
-void introArt();
+// V36: V35 accidentally removed the initial intro() call while simplifying
+// editorial image loading. Without it, CSS leaves ink + title invisible.
+// Start exactly ONCE; replay is handled separately by the REPLAY INTRO button.
 void intro();
+
+/* V35: Editorial art is displayed directly from cocoon7-ink.png in HTML.
+   Do not redraw it on a temporary canvas or replace it asynchronously. */
 
 /* ECDYSIS V12: 2D stages use cocoon1.png–cocoon3.png ONLY.
    The 3D OBJ surface uses cocoon7.png independently.
@@ -258,6 +253,8 @@ async function loadModels(){
 async function changeDimension(to){
  if(to!=="2d"&&to!=="3d")return;
  if(to===dimension){ updateUI(); return; }
+ modeOrbits[dimension]=state.rotate;
+ modeBackgrounds[dimension]=canvasBackground;
  // Remember the viewer-adjusted slider value before switching modes.
  dimensionScales[dimension]=state.scale;
  if(to==='3d'){
@@ -278,6 +275,9 @@ async function changeDimension(to){
   init2D();
  }
  state.scale=dimensionScales[dimension];
+ state.rotate=modeOrbits[dimension];
+ setCanvasBackground(modeBackgrounds[dimension]);
+ threeD?.setInteractiveMode?.(dimension==='3d' && state.rotate);
  $('#geometry-status').textContent=dimension==='2d'
   ?'2D / IMAGE SEQUENCE'
   :'3D / '+backend.toUpperCase()+(backend==='Software 3D'?' (FALLBACK)':'');
@@ -288,11 +288,12 @@ async function changeDimension(to){
  });
  updateUI();
  render();
+ animate();
 }
 $$('[data-dimension]').forEach(b=>b.addEventListener('click',()=>void changeDimension(b.dataset.dimension)));
 
 function setProgress(v){state.progress=Math.min(100,Math.max(0,Math.round(Number(v)||0)));updateUI();render();}
-function updateUI(){const p=state.progress,phase=Math.min(STAGE_COUNT-1,Math.round(p/100*(STAGE_COUNT-1)));$('#progress-range').value=p;$('#progress-readout').textContent=p+'%';$('#dial-number').textContent=String(p).padStart(2,'0');$('#dial-arc').style.strokeDashoffset=515.22*(1-p/100);$('#progress-dial').setAttribute('aria-valuenow',String(p));$('#stage-counter').innerHTML=String(p).padStart(2,'0')+'<span>%</span>';$('#stage-state').textContent=names[phase]+' / '+['ORIGIN','OPENING','SHEDDING'][phase];$$('[data-stage]').forEach((b,i)=>b.classList.toggle('selected',phase===i));$$('[data-param]').forEach(inp=>{const key=inp.dataset.param;inp.value=state[key];const out=$('#out-'+key);if(out)out.textContent=key==='hue'?String(state.hue):Number(state[key]).toFixed(2);});$$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.mode));$$('[data-palette]').forEach(b=>{const yes=b.dataset.palette===state.palette;b.classList.toggle('active',yes);b.setAttribute('aria-pressed',String(yes));});$('#color-a').value=state.inkA;$('#color-b').value=state.inkB;document.documentElement.style.setProperty('--a',state.inkA);document.documentElement.style.setProperty('--b',state.inkB);$('#toggle-rotate').checked=state.rotate;$('#play-sequence').textContent=playing?'Ⅱ PAUSE SEQUENCE':'▶ PLAY SEQUENCE';}
+function updateUI(){const p=state.progress,phase=Math.min(STAGE_COUNT-1,Math.round(p/100*(STAGE_COUNT-1)));$('#progress-range').value=p;if($('#progress-readout'))$('#progress-readout').textContent=p+'%';$('#dial-number').textContent=String(p).padStart(2,'0');$('#dial-arc').style.strokeDashoffset=515.22*(1-p/100);$('#progress-dial').setAttribute('aria-valuenow',String(p));$('#stage-counter').innerHTML=String(p).padStart(2,'0')+'<span>%</span>';$('#stage-state').textContent=names[phase]+' / '+['ORIGIN','OPENING','SHEDDING'][phase];$$('[data-stage]').forEach((b,i)=>b.classList.toggle('selected',phase===i));$$('[data-param]').forEach(inp=>{const key=inp.dataset.param;inp.value=state[key];const out=$('#out-'+key);if(out)out.textContent=key==='hue'?String(state.hue):Number(state[key]).toFixed(2);});$$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.mode));$$('[data-palette]').forEach(b=>{const yes=b.dataset.palette===state.palette;b.classList.toggle('active',yes);b.setAttribute('aria-pressed',String(yes));});$('#color-a').value=state.inkA;$('#color-b').value=state.inkB;document.documentElement.style.setProperty('--a',state.inkA);document.documentElement.style.setProperty('--b',state.inkB);const orbit=$('#toggle-rotate');orbit.setAttribute('aria-pressed',String(state.rotate));$('#orbit-pill').textContent=state.rotate?'ON':'OFF';$('#orbit-state').textContent=state.rotate?'ACTIVE / CLICK TO PAUSE':'PAUSED / CLICK TO ROTATE';$('#play-sequence').textContent=playing?'Ⅱ PAUSE SEQUENCE':'▶ PLAY SEQUENCE';$('#play-sequence').classList.toggle('is-playing',playing);$('#play-sequence').setAttribute('aria-pressed',String(playing));}
 const dial=$('#progress-dial');function pointDial(e){const r=dial.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;setProgress(Math.round(((Math.atan2(x,-y)+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*100));}
 dial.addEventListener('pointerdown',e=>{e.preventDefault();dial.setPointerCapture(e.pointerId);pointDial(e);});dial.addEventListener('pointermove',e=>{if(dial.hasPointerCapture(e.pointerId))pointDial(e);});dial.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;e.preventDefault();const dir=['ArrowLeft','ArrowDown'].includes(e.key)?-1:1;setProgress(e.key==='Home'?0:e.key==='End'?100:state.progress+dir*(e.shiftKey?10:1));});$('#progress-range').addEventListener('input',e=>setProgress(e.target.value));$$('[data-stage]').forEach((b,i)=>b.addEventListener('click',()=>setProgress(stageProgress(i))));
 /* Render just ONE visible canvas, with one animation frame for slider bursts. */
@@ -301,8 +302,8 @@ $$('[data-param]').forEach(inp=>inp.addEventListener('input',()=>{state[inp.data
 $$('[data-mode]').forEach(b=>b.addEventListener('click',()=>{state.mode=b.dataset.mode;updateUI();render();}));
 $$('[data-palette]').forEach(b=>b.addEventListener('click',()=>{state.palette=b.dataset.palette;updateUI();render();}));
 for(const [selector,key] of [['#color-a','inkA'],['#color-b','inkB']])$(selector).addEventListener('input',e=>{state[key]=e.target.value;state.palette='custom';updateUI();if(!inputRAF)inputRAF=requestAnimationFrame(()=>{inputRAF=0;render();});});
-$('#reset-all').addEventListener('click',()=>{setCanvasBackground('beige');playing=false;dimensionScales['2d']=1.3;dimensionScales['3d']=0.75;state={...DEFAULT,scale:dimensionScales[dimension]};if(twoD)twoD.zoom=1;if(threeD){threeD.zoom=1;threeD.yaw=-.38;threeD.pitch=.2;threeD.setInteractiveMode?.(false);}updateUI();render();toast('RESET / ORIGIN RESTORED');});
-$('#toggle-rotate').addEventListener('change',e=>{state.rotate=e.target.checked;threeD?.setInteractiveMode?.(state.rotate&&dimension==='3d');animate();});
+$('#reset-all').addEventListener('click',()=>{playing=false;dimensionScales['2d']=1.3;dimensionScales['3d']=0.75;modeBackgrounds['2d']='beige';modeBackgrounds['3d']='black';modeOrbits['2d']=false;modeOrbits['3d']=true;state={...DEFAULT,scale:dimensionScales[dimension],rotate:modeOrbits[dimension]};if(twoD){twoD.zoom=1;twoD.angle=0;}if(threeD){threeD.zoom=1;threeD.yaw=-.38;threeD.pitch=.2;threeD.setInteractiveMode?.(dimension==='3d'&&state.rotate);}setCanvasBackground(modeBackgrounds[dimension]);updateUI();render();animate();toast('RESET / ORIGIN RESTORED');});
+$('#toggle-rotate').addEventListener('click',()=>{state.rotate=!state.rotate;modeOrbits[dimension]=state.rotate;threeD?.setInteractiveMode?.(state.rotate&&dimension==='3d');updateUI();animate();});
 $('#play-sequence').addEventListener('click',()=>{playing=!playing;if(playing)playStart=performance.now()-state.progress/100*16000;updateUI();animate();});
 // 3D orbit is frame-rate independent; cap GPU work near 30fps instead of 60.
 let lastOrbitTime=0,lastOrbitPaint=0;
@@ -317,17 +318,18 @@ function animate(){
    if(next!==state.progress)setProgress(next);
    if(t===1){playing=false;updateUI();}
   }
-  if(state.rotate&&dimension==='3d'&&threeD){
+  if(state.rotate && (dimension==='3d'?Boolean(threeD):Boolean(twoD))){
    const dt=lastOrbitTime?Math.min(70,now-lastOrbitTime):16.7;
-   threeD.yaw+=(dt*.00024);
+   if(dimension==='3d')threeD.yaw+=(dt*.00024);
+   else twoD.angle=(twoD.angle||0)+dt*.00021;
    lastOrbitTime=now;
    if(now-lastOrbitPaint>=32){
     lastOrbitPaint=now;
-    if(typeof threeD.requestDraw==='function')threeD.requestDraw();
-    else threeD.draw();
+    if(dimension==='3d'){if(typeof threeD.requestDraw==='function')threeD.requestDraw();else threeD.draw();}
+    else twoD.draw();
    }
   }else{lastOrbitTime=0;}
-  if(playing||(state.rotate&&dimension==='3d'&&threeD))frameId=requestAnimationFrame(tick);
+  if(playing||(state.rotate&&(dimension==='3d'?Boolean(threeD):Boolean(twoD))))frameId=requestAnimationFrame(tick);
  }
  frameId=requestAnimationFrame(tick);
 }
@@ -338,6 +340,362 @@ const wrap=$('#export-wrap'),exportBtn=$('#export-png');function toggleMenu(open
 exportBtn.addEventListener('click',()=>toggleMenu(!wrap.classList.contains('open')));document.addEventListener('pointerdown',e=>{if(!wrap.contains(e.target))toggleMenu(false);});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleMenu(false);});
 async function exportPNG(kind){try{const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}const src=renderer.exportCanvas(),out=document.createElement('canvas');out.width=Math.min(2400,Math.max(1400,src.width));out.height=Math.round(out.width*src.height/src.width);const ctx=out.getContext('2d');if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';ctx.fillRect(0,0,out.width,out.height);}ctx.drawImage(src,0,0,out.width,out.height);if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';ctx.font=`${Math.round(out.width*.018)}px monospace`;ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);ctx.textAlign='right';ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);}const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`,file=new File([blob],filename,{type:'image/png'});if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('PNG EXPORTED');}catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}}
 $$('[data-export]').forEach(b=>b.addEventListener('click',()=>{toggleMenu(false);void exportPNG(b.dataset.export);}));
+
+/* ECDYSIS V33 / reliable motion LOG.
+   GIF is encoded locally in a worker with an inline main-thread fallback.
+   MP4 recording is optional and cannot prevent GIF export. */
+const LOG_FPS=30, GIF_FPS=8, GIF_WIDTH=960, MAX_LOG_SECONDS=60;
+/* V37: GIF quality 960px with spatial ordered dithering, stable palette.
+   GIF has only 256 colours. The old RGB332 palette encoded beige
+   #e8dec4 as pink #ffdbff. Use a finer 216-colour cube + 40 precisely
+   chosen neutrals/pigments, shared by ALL frames for temporal stability. */
+function gifPaletteColors(){
+ const colors=[];
+ for(let r=0;r<6;r++)for(let g=0;g<6;g++)for(let b=0;b<6;b++)colors.push([r*51,g*51,b*51]);
+ const additional=[
+  '#e8dec4','#08090b','#fffaee','#72092a','#c7f9e4','#599782',
+  '#b15169','#184c48','#225d58','#89c9b3','#c58c9c','#c8d5bd',
+  '#e8dcca','#e2d5bb','#e6decb','#e5dcc7','#ddd4c0','#d9cfb8',
+  '#f1e7d5','#fff3e1','#997a82','#5e8176','#6faba0','#8dcabc',
+  '#b9ded3','#72938b','#4f5f5a','#263e37','#3f7e74','#96a99f',
+  '#c4b7a5','#b9b2a7','#8a7774','#6b5e5a','#c8a4aa','#815267',
+  '#d5b4b8','#a1b6b2','#7b9897','#aacac1'
+ ];
+ for(const hex of additional){colors.push([1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)));}
+ if(colors.length!==256)throw Error('GIF palette must contain 256 colors');
+ return colors;
+}
+let gifColorLookup=null;
+function getGifColorLookup(){
+ if(gifColorLookup)return gifColorLookup;
+ const palette=gifPaletteColors();
+ const lookup=new Uint8Array(32768);
+ for(let key=0;key<lookup.length;key++){
+  const r=((key>>10)&31)*255/31,g=((key>>5)&31)*255/31,b=(key&31)*255/31;
+  let best=0,dist=Infinity;
+  for(let i=0;i<palette.length;i++){
+   const c=palette[i],dr=r-c[0],dg=g-c[1],db=b-c[2];
+   const d=2*dr*dr+3.1*dg*dg+2.1*db*db;
+   if(d<dist){dist=d;best=i;}
+  }
+  lookup[key]=best;
+ }
+ gifColorLookup=lookup;
+ return lookup;
+}
+let logSession=null,logReady={gif:null,mp4:null};
+const logBtn=$('#log-toggle'),logLabel=$('#log-label');
+let logMode='idle';
+const logDialog=$('#log-dialog');
+function logClock(s){const n=Math.floor(Math.max(0,s));return Math.floor(n/60)+':'+String(n%60).padStart(2,'0');}
+function setLogButton(stage){
+ logMode=stage;
+ logBtn.disabled=stage==='processing';
+ logBtn.classList.toggle('is-recording',stage==='recording');
+ logBtn.setAttribute('aria-pressed',String(stage==='recording'));
+ logLabel.textContent=stage==='processing'?'LOADING...':stage==='recording'?logClock(logSession?(performance.now()-logSession.start)/1000:0):'LOG';
+ logBtn.title=stage==='recording'?'Click again to stop recording':stage==='processing'?'Preparing GIF and MP4':'Start motion recording';
+}
+function updateLogClock(session){
+ if(logSession!==session || logMode!=='recording')return;
+ logLabel.textContent=logClock((performance.now()-session.start)/1000);
+}
+function preferredMP4(){
+ if(typeof MediaRecorder==='undefined')return null;
+ for(const type of ['video/mp4;codecs="avc1.42E01E"','video/mp4;codecs=avc1.42E01E','video/mp4']){
+  try{if(MediaRecorder.isTypeSupported(type))return type;}catch{}
+ }
+ return null;
+}
+function composeLogFrame(session,source){
+ const {output,ctx}=session;
+ const w=output.width,h=output.height;
+ ctx.setTransform(1,0,0,1,0,0);
+ ctx.globalAlpha=1;
+ ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';
+ ctx.fillRect(0,0,w,h);
+ if(source?.width>0 && source?.height>0)ctx.drawImage(source,0,0,w,h);
+}
+function outputFile(blob,filename){
+ const url=URL.createObjectURL(blob),link=document.createElement('a');
+ link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),120000);
+}
+/* Each frame is a compact RGB332 palette index, not a large RGBA image. */
+function gifSnapshot(session){
+ const {gifOutput,gifCtx,output}=session;
+ gifCtx.drawImage(output,0,0,gifOutput.width,gifOutput.height);
+ const rgba=gifCtx.getImageData(0,0,gifOutput.width,gifOutput.height).data;
+ const indexed=new Uint8Array(gifOutput.width*gifOutput.height);
+ const lut=getGifColorLookup();
+  // Stable ordered dithering reduces banding in fine fibres and soft gradients.
+  // The matrix is fixed on the image, so it does not sparkle between frames.
+  const bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+  const width=gifOutput.width;
+  for(let p=0,k=0;p<indexed.length;p++,k+=4){
+   const r=rgba[k],g=rgba[k+1],b=rgba[k+2];
+   // Explicit RGB preservation for both official stage backgrounds.
+   if(r===232&&g===222&&b===196){indexed[p]=216;continue;}
+   if(r===8&&g===9&&b===11){indexed[p]=217;continue;}
+   const x=p%width,y=(p/width)|0;
+   const delta=(bayer[((y&3)<<2)|(x&3)]-7.5)*1.6;
+   const rr=Math.max(0,Math.min(255,Math.round(r+delta)));
+   const gg=Math.max(0,Math.min(255,Math.round(g+delta*.85)));
+   const bb=Math.max(0,Math.min(255,Math.round(b+delta*.95)));
+   indexed[p]=lut[((rr>>3)<<10)|((gg>>3)<<5)|(bb>>3)];
+  }
+ session.frames.push(indexed);
+}
+/* GIF89a with a global 256-color RGB332 table.
+   Critical LZW detail: the CLEAR code must be emitted in the *previous*
+   code width, before resetting the width to 9 bits. V32 inverted this order
+   and corrupted long or high-detail recordings. */
+function encodeGifFrames(frames,width,height,delay){
+ if(!frames?.length)throw Error('No frames recorded');
+ if(!Number.isInteger(width)||!Number.isInteger(height)||width<=0||height<=0||width>65535||height>65535)throw Error('Invalid GIF size');
+ const chunks=[];
+ const byte=v=>chunks.push(v&255);
+ const word=v=>{byte(v);byte(v>>8);};
+ for(const c of 'GIF89a')byte(c.charCodeAt(0));
+ word(width);word(height);byte(0xf7);byte(0);byte(0);
+ for(const color of gifPaletteColors()){
+  byte(color[0]);byte(color[1]);byte(color[2]);
+ }
+ // Infinite animation loop.
+ chunks.push(0x21,0xff,0x0b);
+ for(const c of 'NETSCAPE2.0')byte(c.charCodeAt(0));
+ chunks.push(3,1,0,0,0);
+ const centiseconds=Math.max(2,Math.round(Number(delay)||13));
+ for(const pixels of frames){
+  if(pixels.length!==width*height)throw Error('GIF frame size mismatch');
+  chunks.push(0x21,0xf9,4,0,centiseconds&255,(centiseconds>>8)&255,0,0);
+  byte(0x2c);word(0);word(0);word(width);word(height);byte(0);
+  byte(8);
+  let prefix=-1,dict=new Map(),next=258,bits=9,acc=0,count=0;
+  const packed=[];
+  const emit=code=>{
+   acc|=code<<count;count+=bits;
+   while(count>=8){packed.push(acc&255);acc>>>=8;count-=8;}
+  };
+  const clear=()=>{
+   emit(256); // Emit with the OLD width. Do not reset first.
+   dict=new Map();next=258;bits=9;
+  };
+  clear();
+  for(let p=0;p<pixels.length;p++){
+   const value=pixels[p];
+   if(prefix<0){prefix=value;continue;}
+   const key=prefix*256+value;
+   const existing=dict.get(key);
+   if(existing!==undefined){prefix=existing;continue;}
+   emit(prefix);
+   if(next<4096){
+    dict.set(key,next++);
+    if(next>(1<<bits)&&bits<12)bits++;
+   }else clear();
+   prefix=value;
+  }
+  if(prefix>=0)emit(prefix);
+  emit(257);
+  if(count)packed.push(acc&255);
+  for(let start=0;start<packed.length;start+=255){
+   const n=Math.min(255,packed.length-start);
+   byte(n);
+   for(let j=0;j<n;j++)byte(packed[start+j]);
+  }
+  byte(0);
+ }
+ byte(0x3b);
+ return new Blob([Uint8Array.from(chunks)],{type:'image/gif'});
+}
+/* Self-contained worker: works even if gif-worker.js was never uploaded.
+   If Safari or CSP prevents Blob workers, encode on the main thread. */
+function gifFromFrames(frames,width,height,delay){
+ return new Promise((resolve,reject)=>{
+  let worker=null,url=null,finished=false,timer=null;
+  const cleanup=()=>{
+   if(timer!==null)clearTimeout(timer);
+   if(worker)worker.terminate();
+   if(url)URL.revokeObjectURL(url);
+  };
+  const finish=(error,result)=>{
+   if(finished)return;
+   finished=true;cleanup();
+   error?reject(error):resolve(result);
+  };
+  const fallback=error=>{
+   if(finished)return;
+   console.warn('[ECDYSIS] GIF worker unavailable; using local encoder:',error);
+   cleanup();worker=null;url=null;timer=null;
+   // Yield so that LOADING has time to appear before local encoding begins.
+   setTimeout(()=>{
+    try{finish(null,encodeGifFrames(frames,width,height,delay));}
+    catch(err){finish(err);}
+   },25);
+  };
+  try{
+   const code=`const gifPaletteColors = ${gifPaletteColors.toString()};\nconst encodeGifFrames = ${encodeGifFrames.toString()};\nself.onmessage = e => {try{const {frames,width,height,delay}=e.data;self.postMessage({ok:true,blob:encodeGifFrames(frames,width,height,delay)});}catch(error){self.postMessage({ok:false,error:String(error?.message||error)});}};`;
+   url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
+   worker=new Worker(url);
+   worker.onmessage=e=>{
+    if(e.data?.ok && e.data.blob instanceof Blob)finish(null,e.data.blob);
+    else fallback(Error(e.data?.error||'GIF worker did not return a file'));
+   };
+   worker.onerror=e=>{e.preventDefault?.();fallback(Error(e.message||'GIF worker could not start'));};
+   timer=setTimeout(()=>fallback(Error('GIF worker timed out')),90000);
+   // Do not transfer buffers: retain frames for Safari fallback if a worker fails.
+   worker.postMessage({frames,width,height,delay});
+  }catch(err){fallback(err);}
+ });
+}
+function showLogChoices(gif,mp4,seconds){
+ logReady={gif,mp4};
+ $('#log-dialog-details').textContent=`${logClock(seconds)} recorded / ${GIF_FPS} FPS GIF / ${LOG_FPS} FPS video`;
+ const gifButton=$('#download-gif'),mp4Button=$('#download-mp4');
+ gifButton.disabled=!gif;
+ mp4Button.disabled=!mp4;
+ $('#log-dialog-note').textContent=gif&&mp4?'Choose GIF or MP4. Both preserve background and color changes.':gif?'GIF is ready. MP4 recording is unsupported or unavailable in this browser.':mp4?'MP4 is ready. GIF export could not be completed.':'No recording format is available.';
+ logDialog.hidden=false;
+ (gif?gifButton:mp4Button).focus();
+}
+async function startLog(){
+ if(logSession)return;
+ if(!active()){toast('OPEN THE MOLT EXPERIMENT FIRST');return;}
+ let session=null;
+ try{
+  const source=active().exportCanvas();
+  if(!source?.width||!source?.height)throw Error('Image canvas is not ready');
+  const width=Math.max(2,2*Math.round(Math.min(960,source.width)/2));
+  const height=Math.max(2,2*Math.round(width*source.height/source.width/2));
+  const output=document.createElement('canvas');output.width=width;output.height=height;
+  const ctx=output.getContext('2d',{alpha:false});
+  const gifOutput=document.createElement('canvas');gifOutput.width=GIF_WIDTH;
+  gifOutput.height=Math.max(2,Math.round(height*GIF_WIDTH/width));
+  const gifCtx=gifOutput.getContext('2d',{willReadFrequently:true});
+  if(gifCtx){gifCtx.imageSmoothingEnabled=true;gifCtx.imageSmoothingQuality='high';}
+  if(!ctx||!gifCtx)throw Error('Canvas capture is not supported');
+  session={output,ctx,gifOutput,gifCtx,frames:[],start:performance.now(),nextGifTime:0,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};
+  logSession=session;
+  logReady={gif:null,mp4:null};
+  logDialog.hidden=true;
+  composeLogFrame(session,source);
+  try{gifSnapshot(session);}catch(error){console.warn('[ECDYSIS] Initial LOG snapshot unavailable; retrying during recording:',error);}
+  session.nextGifTime=1000/GIF_FPS;
+  // Canvas capture is OPTIONAL: GIF must work without MediaRecorder or captureStream.
+  const format=preferredMP4();
+  if(format&&typeof output.captureStream==='function'){
+   try{
+    session.stream=output.captureStream(LOG_FPS);
+    const recorder=new MediaRecorder(session.stream,{mimeType:format,videoBitsPerSecond:3800000});
+    session.recorder=recorder;
+    session.recordDone=new Promise((resolve,reject)=>{
+     recorder.ondataavailable=e=>{if(e.data?.size)session.chunks.push(e.data);};
+     recorder.onstop=()=>resolve(new Blob(session.chunks,{type:'video/mp4'}));
+     recorder.onerror=e=>reject(Error(e.error?.message||'MP4 recorder failed'));
+    });
+    recorder.start(1000);
+   }catch(error){
+    console.warn('[ECDYSIS] MP4 unavailable; GIF recording continues:',error);
+    session.stream?.getTracks().forEach(track=>track.stop());
+    session.stream=null;session.recorder=null;session.recordDone=null;
+   }
+  }
+  setLogButton('recording');
+  session.clockTimer=setInterval(()=>updateLogClock(session),200);
+  function frame(now){
+   if(session.stopped)return;
+   // Use the same monotonic clock as session.start, independently of the
+   // browser's requestAnimationFrame timestamp implementation.
+   const elapsed=Math.max(0,performance.now()-session.start);
+   const current=dimension==='3d'?canvas3D:canvas2D;
+   try{
+    composeLogFrame(session,current);
+    if(elapsed>=session.nextGifTime){
+     gifSnapshot(session);
+     session.nextGifTime=elapsed+1000/GIF_FPS;
+    }
+    session.captureError=null;
+   }catch(error){
+    // V33 accidentally STOPPED recording on the first bad frame, which
+    // opened the save popup without a second click (notably on Safari).
+    // Keep the session alive and retry on the next frame instead.
+    session.captureError=error;
+    if(!session.loggedCaptureError){
+      session.loggedCaptureError=true;
+      console.warn('[ECDYSIS] LOG frame temporarily unavailable; retrying without stopping:',error);
+    }
+   }
+   updateLogClock(session);
+   if(elapsed>=MAX_LOG_SECONDS*1000){void stopLog();return;}
+   session.raf=requestAnimationFrame(frame);
+  }
+  session.raf=requestAnimationFrame(frame);
+ }catch(error){
+  console.error('[ECDYSIS] LOG could not start:',error);
+  if(session?.clockTimer)clearInterval(session.clockTimer);
+  session?.stream?.getTracks().forEach(track=>track.stop());
+  logSession=null;setLogButton('idle');
+  toast('LOG START FAILED: '+(error.message||error));
+ }
+}
+function timeoutPromise(promise,ms){
+ return new Promise(resolve=>{
+  let finished=false;
+  const timeout=setTimeout(()=>{if(!finished){finished=true;resolve(null);}},ms);
+  Promise.resolve(promise).then(value=>{if(!finished){finished=true;clearTimeout(timeout);resolve(value);}},error=>{
+   console.warn('[ECDYSIS] MP4 completion failed:',error);
+   if(!finished){finished=true;clearTimeout(timeout);resolve(null);}
+  });
+ });
+}
+async function stopLog(){
+ const session=logSession;
+ if(!session||session.stopped)return;
+ session.stopped=true;
+ cancelAnimationFrame(session.raf);
+ if(session.clockTimer){clearInterval(session.clockTimer);session.clockTimer=null;}
+ setLogButton('processing');
+ const seconds=(performance.now()-session.start)/1000;
+ let gif=null,mp4=null;
+ try{
+  if(session.recorder&&session.recorder.state!=='inactive'){
+   try{session.recorder.stop();}catch(error){console.warn('[ECDYSIS] MP4 stop failed:',error);}
+  }
+  // Finish GIF independently from MP4. One format failing cannot discard the other.
+  const mp4Promise=session.recordDone?timeoutPromise(session.recordDone,12000):Promise.resolve(null);
+  try{
+   gif=await gifFromFrames(session.frames,session.gifOutput.width,session.gifOutput.height,Math.round(100/GIF_FPS));
+   if(!gif?.size)throw Error('Empty GIF result');
+  }catch(error){console.error('[ECDYSIS] GIF encoding failed:',error);}
+  const maybeMP4=await mp4Promise;
+  if(maybeMP4?.size)mp4=maybeMP4;
+  if(gif||mp4)showLogChoices(gif,mp4,seconds);
+  else toast('LOG FAILED: No usable GIF or MP4. See Console for details.');
+ }catch(error){
+  console.error('[ECDYSIS] LOG failed:',error);
+  toast('LOG FAILED: '+(error.message||error));
+ }finally{
+  session.stream?.getTracks().forEach(track=>track.stop());
+  session.frames=[];logSession=null;setLogButton('idle');
+ }
+}
+logBtn.addEventListener('click',()=>{
+ if(logMode==='processing')return;
+ if(logMode==='recording'){
+  // Ignore duplicate/synthetic clicks originating from the first press.
+  // A second deliberate click after 0.75 seconds ends the recording.
+  if(!logSession || performance.now()-logSession.start<750)return;
+  void stopLog();
+ }else{
+  void startLog();
+ }
+});
+$('#download-gif').addEventListener('click',()=>{if(logReady.gif)outputFile(logReady.gif,'ECDYSIS_LOG_'+Date.now()+'.gif');});
+$('#download-mp4').addEventListener('click',()=>{if(logReady.mp4)outputFile(logReady.mp4,'ECDYSIS_LOG_'+Date.now()+'.mp4');});
+$('#close-log-dialog').addEventListener('click',()=>{logDialog.hidden=true;});
+logDialog.addEventListener('pointerdown',e=>{if(e.target===logDialog)logDialog.hidden=true;});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!logDialog.hidden)logDialog.hidden=true;});
+
 $('#hero-heading').innerHTML='<span class="hero-molt">MOLT,</span><span class="hero-subline">until perfect.</span>'; 
 updateUI();if(location.hash==='#molt')show('molt');
 if(['localhost','127.0.0.1'].includes(location.hostname)){const events=new EventSource('/__ecdysis_events');events.addEventListener('reload',()=>location.reload());}

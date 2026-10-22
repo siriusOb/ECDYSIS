@@ -1,10 +1,29 @@
 /* ECDYSIS V23 — full-quality 3D ink while moving, fixed resolution, identical surface coverage */
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
-const palettes={origin:0,prism:1,shell:2,mint:3,custom:4};
-const defaults={progress:0,modification:0,scale:1,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.6,hue:0,mode:'surface'};
+const palettes={origin:0,prism:1,shell:2,mint:3,custom:4,monotone:5};
+const defaults={progress:0,modification:0,scale:1,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.6,hue:0,mode:'surface',monoWhite:0};
 const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255);
 const specimenScaleBias=.75;
 const STAGE_COUNT=3;
+/* V39: Cyclic mirrored hue drift. 0deg runs A to B, and +/-180deg
+ * reverses B to A. There is no sliding gradient beyond the canvas. */
+function gradientPhase(u,hue){
+ return .5-.5*Math.cos(Math.PI*clamp(u,0,1)+hue*Math.PI/180);
+}
+function paletteAt(stops,t){
+ const p=clamp(t,0,1)*(stops.length-1),i=Math.min(stops.length-2,Math.floor(p)),f=p-i;
+ const a=rgb(stops[i]),b=rgb(stops[i+1]);
+ return 'rgb('+a.map((n,j)=>Math.round((n+(b[j]-n)*f)*255)).join(',')+')';
+}
+function orientedGradient(ctx,width,height,stops,hue){
+ const g=ctx.createLinearGradient(0,0,width,height);
+ for(let k=0;k<=64;k++){
+  const u=k/64;
+  g.addColorStop(u,paletteAt(stops,gradientPhase(u,hue)));
+ }
+ return g;
+}
+
 
 /* A safe triangulator that does not stretch concave caps across the specimen. */
 export function parseOBJGeometry(source){
@@ -279,22 +298,21 @@ function prepareFibreAtlas(image) {
 }
 
 export class Specimen2D{
- constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:true});this.params={...defaults};this.images=Array(STAGE_COUNT).fill(null);this.zoom=1;this.cache=new Map();this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();}
+ constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:true});this.params={...defaults};this.images=Array(STAGE_COUNT).fill(null);this.zoom=1;this.angle=0;this.cache=new Map();this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();}
  setImage(i,img){this.images[i]=prepareImage(img);this.cache.clear();this.draw();}
- setParams(p){const colorChanged=['palette','inkA','inkB','intensity','hue'].some(k=>k in p&&p[k]!==this.params[k]);Object.assign(this.params,p);if(colorChanged)this.cache.clear();this.draw();}
+ setParams(p){const colorChanged=['palette','inkA','inkB','intensity','hue','monoWhite'].some(k=>k in p&&p[k]!==this.params[k]);Object.assign(this.params,p);if(colorChanged)this.cache.clear();this.draw();}
  resize(){const r=this.canvas.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1);const w=Math.max(2,Math.round(r.width*dpr)),h=Math.max(2,Math.round(r.height*dpr));if(w!==this.canvas.width||h!==this.canvas.height){this.canvas.width=w;this.canvas.height=h;}this.draw();}
  tinted(i){const src=this.images[i]||this.images[0];if(!src)return null;const p=this.params;
-  if(p.palette==='origin'||p.intensity<.005)return src;
-  const key=[i,p.palette,p.inkA,p.inkB,p.intensity,p.hue].join('|');if(this.cache.has(key))return this.cache.get(key);
+  if(p.palette==='origin'||(p.palette!=='monotone'&&p.intensity<.005))return src;
+  const key=[i,p.palette,p.inkA,p.inkB,p.intensity,p.hue,p.monoWhite].join('|');if(this.cache.has(key))return this.cache.get(key);
   const c=document.createElement('canvas');c.width=src.width;c.height=src.height;const ctx=c.getContext('2d');ctx.drawImage(src,0,0);
-  const t=(p.hue/360)%1;
+  if(p.palette==='monotone'){ctx.globalCompositeOperation='source-in';ctx.fillStyle=p.monoWhite?'#ffffff':'#000000';ctx.fillRect(0,0,c.width,c.height);ctx.globalCompositeOperation='source-over';if(this.cache.size>=6)this.cache.clear();this.cache.set(key,c);return c;}
   let stops;
   if(p.palette==='prism')stops=['#04b7b0','#8db9a2','#d5a65e','#bc396e','#6856cc','#1ab7c5'];
   else if(p.palette==='shell')stops=['#72092a','#b15169','#e8dec4'];
   else if(p.palette==='mint')stops=['#184c48','#599782','#c7f9e4'];
   else stops=[p.inkA,p.inkB];
-  const g=ctx.createLinearGradient(c.width*t,0,c.width*(1+t),c.height);
-  stops.forEach((v,j)=>g.addColorStop(j/(stops.length-1),v));
+  const g=orientedGradient(ctx,c.width,c.height,stops,p.hue);
   // Preserve all fine alpha detail, recolour with a compositing operation.
   ctx.globalCompositeOperation='source-atop';ctx.globalAlpha=p.intensity;ctx.fillStyle=g;ctx.fillRect(0,0,c.width,c.height);
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
@@ -304,7 +322,7 @@ export class Specimen2D{
   const f=p.progress/100*(STAGE_COUNT-1),a=Math.min(STAGE_COUNT-1,Math.floor(f)),b=Math.min(STAGE_COUNT-1,a+1),t=f-a;
   for(const [i,alpha] of [[a,1-t],[b,t]]){if(alpha<.001)continue;const img=this.tinted(i);if(!img)continue;
    const s=Math.min(w/(img.width*1.12),h/(img.height*1.14))*p.scale*this.zoom*specimenScaleBias;
-   ctx.save();ctx.translate(w/2,h/2);ctx.scale(s,s);ctx.globalAlpha=alpha;
+   ctx.save();ctx.translate(w/2,h/2);ctx.rotate(this.angle||0);ctx.scale(s,s);ctx.globalAlpha=alpha;
    const m=p.modification;
    if(m<.001){ctx.drawImage(img,-img.width/2,-img.height/2);}else{
     // Continuous single-piece ripple; no artificial 4-way peel.
@@ -360,7 +378,8 @@ in vec3 v_obj;
 in vec3 v_normal;
 in vec3 v_objNormal;
 uniform sampler2D u_tex;
-uniform float u_palette,u_intensity,u_hue,u_alpha,u_glow,u_wire;
+uniform float u_palette,u_intensity,u_hue,u_alpha,u_glow,u_wire,u_monoWhite;
+uniform float u_phaseMin,u_phaseMax;
 uniform vec3 u_a,u_b;
 out vec4 outColor;
 
@@ -451,6 +470,24 @@ vec4 objectInk(vec3 p, vec3 n) {
   vec4 strongest = chooseStronger(px, py);
   strongest = chooseStronger(strongest, pz);
 
+  // V37: cross-fade actual source-pigment samples across triplanar transitions.
+  // Preserve the strongest source alpha to keep the original open fibre density.
+  // Weighted RGB removes abrupt colour islands caused by chooseStronger().
+  vec3 smoothWeights = vec3(
+    smoothstep(0.01, 0.34, x.a) * w.x,
+    smoothstep(0.01, 0.34, y.a) * w.y,
+    smoothstep(0.01, 0.34, z.a) * w.z
+  );
+  float weightSum = smoothWeights.x + smoothWeights.y + smoothWeights.z;
+  if (weightSum > 0.00001) {
+    vec3 blendedSource = (
+      x.rgb * smoothWeights.x +
+      y.rgb * smoothWeights.y +
+      z.rgb * smoothWeights.z
+    ) / weightSum;
+    strongest.rgb = mix(strongest.rgb, blendedSource, 0.88);
+  }
+
   // Restrict secondary projection to genuine soft gaps; retain the
   // source artwork's organic breathing space instead of a sealed shell.
   if (strongest.a < 0.14) {
@@ -470,14 +507,33 @@ vec4 objectInk(vec3 p, vec3 n) {
  * multi-projection fibre field. No sparse preview shader is ever substituted. */
 void main() {
   vec4 artwork = objectInk(v_obj, v_objNormal);
-  float phase = fract(v_obj.x*.20-v_obj.y*.27+v_obj.z*.13+u_hue/360.0+.31);
+  // Smooth continuous volume-space pigment field: never fract() at the
+  // seam, never a hard two-colour boundary. Stable under camera rotation.
+  // Normalize across the specimen's OWN longitudinal axis, not the camera.
+  // Hue drift changes gradient orientation, never total colour dominance.
+  float longitudinal = clamp((v_obj.x-u_phaseMin)/max(0.001,u_phaseMax-u_phaseMin),0.0,1.0);
+  float phase = 0.5 - 0.5*cos(3.14159265*longitudinal + radians(u_hue));
   vec3 pigment = artwork.rgb;
   if (u_palette > 0.5) {
     vec3 target = artwork.rgb;
-    if (u_palette < 1.5) target = spectrum(phase);
-    else if (u_palette < 2.5) target = mix(vec3(.447,.035,.165),vec3(.85,.36,.44),phase);
-    else if (u_palette < 3.5) target = mix(vec3(.07,.29,.27),vec3(.78,.97,.89),phase);
-    else target = mix(u_a,u_b,phase);
+    if (u_palette < 1.5) {
+      target = mix(
+        mix(vec3(.08,.77,.72),vec3(.88,.71,.42),smoothstep(0.0,0.58,phase)),
+        vec3(.76,.22,.49),smoothstep(0.45,1.0,phase)
+      );
+    } else if (u_palette < 2.5) {
+      target = mix(
+        mix(vec3(.447,.035,.165),vec3(.75,.28,.43),smoothstep(0.0,0.52,phase)),
+        vec3(.91,.87,.79),smoothstep(0.47,1.0,phase)
+      );
+    } else if (u_palette < 3.5) {
+      target = mix(
+        mix(vec3(.07,.29,.27),vec3(.36,.67,.60),smoothstep(0.0,0.52,phase)),
+        vec3(.78,.97,.89),smoothstep(0.46,1.0,phase)
+      );
+    } else {
+      target = mix(u_a,u_b,smoothstep(0.02,0.98,phase));
+    }
     pigment = mix(artwork.rgb,target,u_intensity);
   }
 
@@ -495,6 +551,7 @@ void main() {
   float coverage = smoothstep(0.045,0.30,inkAlpha);
   if(coverage < 0.035) discard;
   float alpha = u_alpha * coverage * (0.42 + 0.52*inkAlpha);
+  if(u_palette>4.5) pigment=vec3(u_monoWhite>.5?1.0:0.0);
   outColor = vec4(pigment,clamp(alpha,0.0,1.0));
 }`;
 
@@ -528,7 +585,11 @@ function program(gl) {
   return compiled;
 }
 
-function upload(gl,g){const vao=gl.createVertexArray();gl.bindVertexArray(vao);const data=new Float32Array(g.pos.length/3*8);for(let i=0;i<g.pos.length/3;i++){data.set(g.pos.subarray(i*3,i*3+3),i*8);data.set(g.norm.subarray(i*3,i*3+3),i*8+3);data.set(g.uv.subarray(i*2,i*2+2),i*8+6);}const vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);for(const [i,len,offset] of [[0,3,0],[1,3,12],[2,2,24]]){gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,len,gl.FLOAT,false,32,offset);}const faces=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,faces);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,g.tri,gl.STATIC_DRAW);const lines=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,lines);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,g.lines,gl.STATIC_DRAW);gl.bindVertexArray(null);return {vao,vbo,faces,lines,tri:g.tri.length,wire:g.lines.length};}
+function upload(gl,g){
+ let phaseMin=Infinity,phaseMax=-Infinity;
+ for(let j=0;j<g.pos.length;j+=3){const x=g.pos[j];if(x<phaseMin)phaseMin=x;if(x>phaseMax)phaseMax=x;}
+ if(!Number.isFinite(phaseMin)||!Number.isFinite(phaseMax)){phaseMin=-1;phaseMax=1;}
+ const vao=gl.createVertexArray();gl.bindVertexArray(vao);const data=new Float32Array(g.pos.length/3*8);for(let i=0;i<g.pos.length/3;i++){data.set(g.pos.subarray(i*3,i*3+3),i*8);data.set(g.norm.subarray(i*3,i*3+3),i*8+3);data.set(g.uv.subarray(i*2,i*2+2),i*8+6);}const vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);for(const [i,len,offset] of [[0,3,0],[1,3,12],[2,2,24]]){gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,len,gl.FLOAT,false,32,offset);}const faces=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,faces);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,g.tri,gl.STATIC_DRAW);const lines=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,lines);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,g.lines,gl.STATIC_DRAW);gl.bindVertexArray(null);return {vao,vbo,faces,lines,tri:g.tri.length,wire:g.lines.length,phaseMin,phaseMax};}
 
 function stageDensityGains(counts){
  const usable=counts.filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
@@ -556,7 +617,7 @@ function stableStageWeights(progress,counts){
 }
 
 export class Specimen3D{
- constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:true,preserveDrawingBuffer:true,premultipliedAlpha:false});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','palette','intensity','hue','alpha','glow','wire','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=-.38;this.pitch=.2;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
+ constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:true,preserveDrawingBuffer:true,premultipliedAlpha:false});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=-.38;this.pitch=.2;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
   canvas.addEventListener('pointerdown',e=>{
    this.drag={x:e.clientX,y:e.clientY,yaw:this.yaw,pitch:this.pitch};
    canvas.setPointerCapture(e.pointerId);
@@ -619,14 +680,14 @@ export class Specimen3D{
   this.requestDraw();
  }
  draw(){const gl=this.gl,p=this.params;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(this.prog);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.CULL_FACE);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
-  const set=(k,v)=>gl.uniform1f(this.uniforms[k],v);set('aspect',this.canvas.width/this.canvas.height);set('scale',p.scale*this.zoom*specimenScaleBias);set('yaw',this.yaw);set('pitch',this.pitch);set('modification',p.modification);set('palette',palettes[p.palette]??0);set('intensity',p.intensity);set('hue',p.hue);set('wire',p.mode==='wire'?1:0);set('glow',clamp(1-(performance.now()-this.flashAt)/440)**2);gl.uniform3fv(this.uniforms.a,rgb(p.inkA));gl.uniform3fv(this.uniforms.b,rgb(p.inkB));gl.uniform1i(this.uniforms.tex,0);
+  const set=(k,v)=>gl.uniform1f(this.uniforms[k],v);set('aspect',this.canvas.width/this.canvas.height);set('scale',p.scale*this.zoom*specimenScaleBias);set('yaw',this.yaw);set('pitch',this.pitch);set('modification',p.modification);set('palette',palettes[p.palette]??0);set('monoWhite',p.monoWhite||0);set('intensity',p.intensity);set('hue',p.hue);set('wire',p.mode==='wire'?1:0);set('glow',clamp(1-(performance.now()-this.flashAt)/440)**2);gl.uniform3fv(this.uniforms.a,rgb(p.inkA));gl.uniform3fv(this.uniforms.b,rgb(p.inkB));gl.uniform1i(this.uniforms.tex,0);
   const counts=this.meshes.map(m=>m?m.tri:0);
   const weights=stableStageWeights(p.progress,counts);
   for(let i=0;i<weights.length;i++){
    const opacity=weights[i];
    if(opacity<.045)continue;
    const mesh=this.meshes[i]||this.meshes[0],tex=this.textures[i]||this.textures[0];if(!mesh||!tex)continue;
-   gl.clear(gl.DEPTH_BUFFER_BIT);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.bindVertexArray(mesh.vao);set('alpha',opacity);
+   gl.clear(gl.DEPTH_BUFFER_BIT);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.bindVertexArray(mesh.vao);set('alpha',opacity);set('phaseMin',mesh.phaseMin);set('phaseMax',mesh.phaseMax);
    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,p.mode==='wire'?mesh.lines:mesh.faces);
    gl.drawElements(p.mode==='wire'?gl.LINES:gl.TRIANGLES,p.mode==='wire'?mesh.wire:mesh.tri,gl.UNSIGNED_INT,0);
   }
@@ -738,20 +799,20 @@ export class SpecimenSoftware3D {
     const base = this.atlases[i] || this.atlases[0];
     if (!base) return null;
     const p = this.params;
-    if (p.palette === 'origin' || p.intensity < .01) return base;
-    const key = [i,p.palette,p.inkA,p.inkB,p.hue,p.intensity].join('|');
+    if (p.palette === 'origin' || (p.palette!=='monotone' && p.intensity < .01)) return base;
+    const key = [i,p.palette,p.inkA,p.inkB,p.hue,p.intensity,p.monoWhite].join('|');
     if (this.tintCache.has(key)) return this.tintCache.get(key);
     const result = document.createElement('canvas');
     result.width=base.width; result.height=base.height;
     const ctx=result.getContext('2d');
     ctx.drawImage(base,0,0);
+    if(p.palette==='monotone'){ctx.globalCompositeOperation='source-in';ctx.fillStyle=p.monoWhite?'#ffffff':'#000000';ctx.fillRect(0,0,result.width,result.height);ctx.globalCompositeOperation='source-over';this.tintCache.set(key,result);return result;}
     const colours = p.palette === 'prism'
       ? ['#0ac6be','#ddb058','#e75280','#7a53c7','#75d8b8']
       : p.palette === 'shell' ? ['#72092a','#ba607a','#e8dec4']
       : p.palette === 'mint' ? ['#225d58','#599782','#c7f9e4']
       : [p.inkA,p.inkB];
-    const g=ctx.createLinearGradient(0,0,result.width,result.height);
-    colours.forEach((color,n)=>g.addColorStop(n/(colours.length-1),color));
+    const g=orientedGradient(ctx,result.width,result.height,colours,p.hue);
     ctx.globalCompositeOperation='source-atop';
     ctx.globalAlpha=p.intensity;
     ctx.fillStyle=g;
