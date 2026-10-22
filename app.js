@@ -51,19 +51,83 @@ function render(){active()?.setParams(state);}
 function show(which){const target=which==='molt'?'molt':'ecdysis';$$('.view').forEach(el=>el.hidden=el.id!=='view-'+target);$$('.site-nav button').forEach(el=>{const yes=el.dataset.view===target;el.classList.toggle('current',yes);if(yes)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});history.replaceState(null,'','#'+target);window.scrollTo({top:0,behavior:'instant'});if(target==='molt')init2D();}
 $$('[data-view]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.view)));
 
-/* Intro grows without rotation or radiating SVG lines. */
-function fitIntro(){const title=$('#intro-word'),box=$('.intro-fit');if(!title||!box)return;title.style.setProperty('--fit',1);title.style.setProperty('--fit',String(Math.min(1,(box.clientWidth-16)/Math.max(1,title.scrollWidth))));}
-function closeIntro(){clearTimeout(introTimer);const el=$('#intro');if(!el||el.hidden)return;el.classList.add('is-leaving');clearTimeout(introFade);introFade=setTimeout(()=>{el.hidden=true;el.classList.remove('is-leaving');},830);}
-function intro(){const el=$('#intro');clearTimeout(introTimer);clearTimeout(introFade);el.hidden=false;el.classList.remove('is-leaving');for(const child of el.querySelectorAll('.intro-image,.intro-serial,.intro-fit h1,.intro-caption,.intro-timeline i')){child.style.animation='none';void child.offsetWidth;child.style.removeProperty('animation');}fitIntro();introTimer=setTimeout(closeIntro,matchMedia('(prefers-reduced-motion: reduce)').matches?900:4000);}
-$('#intro-threads')?.remove();$('#intro-skip')?.addEventListener('click',closeIntro);$('#replay-intro')?.addEventListener('click',intro);window.addEventListener('resize',fitIntro);document.fonts?.ready?.then(fitIntro);
-
-/* Intro artwork keeps original resolution; alpha is prepared only once. */
-async function introArt(){let img=null;for(const url of ['assets/cocoon7-ink.png','assets/cocoon7.png']){try{img=await getImage(url);break;}catch{}}
- if(!img)return;
- const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0);const data=ctx.getImageData(0,0,c.width,c.height);for(let i=0;i<data.data.length;i+=4){const d=data.data,b=Math.max(d[i],d[i+1],d[i+2]);d[i+3]=Math.round(d[i+3]*Math.min(1,Math.max(0,(b-7)/70)));}ctx.putImageData(data,0,0);
- const blob=await new Promise(resolve=>c.toBlob(resolve,'image/png'));if(blob){const url=URL.createObjectURL(blob);$$('.intro-image,.processed-cocoon').forEach(node=>node.src=url);}
+/* ECDYSIS V30: preload intro INK and custom font before a single animation.
+   Intro image has a permanent src in index.html. Never replace its pixels. */
+function fitIntro(){
+ const title=$('#intro-word'),box=$('.intro-fit');
+ if(!title||!box)return;
+ title.style.setProperty('--fit','1');
+ title.style.setProperty('--fit',String(Math.min(1,(box.clientWidth-16)/Math.max(1,title.scrollWidth))));
 }
-void introArt();intro();
+let introRun=0;
+function closeIntro(){
+ ++introRun;
+ clearTimeout(introTimer);
+ const el=$('#intro');
+ if(!el||el.hidden)return;
+ el.classList.add('is-leaving');
+ clearTimeout(introFade);
+ introFade=setTimeout(()=>{el.hidden=true;el.classList.remove('is-leaving','intro-playing');},830);
+}
+function waitForIntroInk(){
+ const image=$('.intro-image');
+ if(!image)return Promise.resolve();
+ if(image.complete)return image.naturalWidth>0?image.decode?.().catch(()=>{})??Promise.resolve():Promise.resolve();
+ return new Promise(resolve=>{
+  image.addEventListener('load',()=>resolve(),{once:true});
+  image.addEventListener('error',()=>{console.warn('[ECDYSIS] Intro ink unavailable: assets/cocoon7-ink.png');resolve();},{once:true});
+ });
+}
+async function intro(){
+ const el=$('#intro');if(!el)return;
+ const run=++introRun;
+ clearTimeout(introTimer);clearTimeout(introFade);
+ el.hidden=false;
+ el.classList.remove('is-leaving','intro-playing');
+ // Browser fonts use font-display:swap elsewhere; don't expose the heading
+ // until the actual custom face is resolved to prevent font flashes.
+ const inkReady=waitForIntroInk();
+ const fontReady=document.fonts?.load('64px "ECD Gothic"').catch(error=>{
+  console.warn('[ECDYSIS] Intro font loading:',error);return [];
+ })??Promise.resolve([]);
+ await Promise.all([inkReady,fontReady]);
+ if(run!==introRun||el.hidden)return;
+ fitIntro();
+ // A single forced style read gives replay a fresh animation timeline.
+ void el.offsetWidth;
+ el.classList.add('intro-playing');
+ introTimer=setTimeout(closeIntro,matchMedia('(prefers-reduced-motion: reduce)').matches?900:4000);
+}
+$('#intro-threads')?.remove();
+$('#intro-skip')?.addEventListener('click',closeIntro);
+$('#replay-intro')?.addEventListener('click',()=>{void intro();});
+window.addEventListener('resize',()=>{if($('#intro')?.classList.contains('intro-playing'))fitIntro();});
+
+/* Editor/hero image processing is independent from the intro image.
+   Only .processed-cocoon is updated; .intro-image stays cocoon7-ink.png. */
+async function introArt(){
+ let img=null;
+ for(const url of ['assets/cocoon7-ink.png','assets/cocoon7.png']){
+  try{img=await getImage(url);break;}catch{}
+ }
+ if(!img)return;
+ const c=document.createElement('canvas');
+ c.width=img.naturalWidth;c.height=img.naturalHeight;
+ const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0);
+ const data=ctx.getImageData(0,0,c.width,c.height);
+ for(let i=0;i<data.data.length;i+=4){
+  const d=data.data,b=Math.max(d[i],d[i+1],d[i+2]);
+  d[i+3]=Math.round(d[i+3]*Math.min(1,Math.max(0,(b-7)/70)));
+ }
+ ctx.putImageData(data,0,0);
+ const blob=await new Promise(resolve=>c.toBlob(resolve,'image/png'));
+ if(blob){
+  const url=URL.createObjectURL(blob);
+  $$('.processed-cocoon').forEach(node=>node.src=url);
+ }
+}
+void introArt();
+void intro();
 
 /* ECDYSIS V12: 2D stages use cocoon1.png–cocoon3.png ONLY.
    The 3D OBJ surface uses cocoon7.png independently.

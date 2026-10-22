@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#fffaee" />
   <meta name="description" content="ECDYSIS / Memory shedding, identity and the right to change." />
   <title>ECDYSIS &#x2014; Molt, until perfect.</title>
+  <link rel="preload" href="assets/cocoon7-ink.png" as="image" fetchpriority="high" />
+  <link rel="preload" href="assets/gothic_ultra_ot.otf" as="font" type="font/otf" crossorigin />
   <!-- V29: Full CSS is embedded as a reliable fallback. It protects the layout
        when styles.css was not copied to the same folder or is unavailable.
        The external stylesheet below remains available for future CSS changes. -->
@@ -815,11 +817,59 @@ button:focus-visible, input:focus-visible, [role=slider]:focus-visible { outline
 
   </style>
   <link rel="stylesheet" href="styles.css" />
+  <!-- V30: One stable intro source; animation starts only after ink and type are ready. -->
+  <style id="ecdysis-intro-stability-v30">
+    #intro .intro-image {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(.76);
+      animation: none !important;
+      backface-visibility: hidden;
+    }
+    #intro.intro-playing .intro-image {
+      animation: intro-ink-stable-v30 3.85s ease-out both !important;
+    }
+    @keyframes intro-ink-stable-v30 {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(.76); }
+      35% { opacity: .68; }
+      100% { opacity: .84; transform: translate(-50%, -50%) scale(1.03); }
+    }
+    #intro .intro-title-group { visibility: hidden; }
+    #intro.intro-playing .intro-title-group { visibility: visible; }
+    #intro .intro-fit h1 {
+      opacity: 0;
+      animation: none !important;
+      filter: none !important;
+      text-shadow: none !important;
+      -webkit-text-stroke: 0 !important;
+      color: #72092a !important;
+      -webkit-text-fill-color: #72092a !important;
+    }
+    #intro.intro-playing .intro-fit h1 {
+      animation: intro-title-stable-v30 .85s ease-out .25s both !important;
+    }
+    @keyframes intro-title-stable-v30 {
+      from {opacity:0; transform:translate(-50%,-48%) scaleX(var(--fit,1));}
+      to {opacity:1; transform:translate(-50%,-50%) scaleX(var(--fit,1));}
+    }
+    #intro .intro-serial, #intro .intro-caption { opacity:0; animation:none !important; }
+    #intro.intro-playing .intro-serial { animation:intro-text-stable-v30 .8s ease-out .5s both !important; }
+    #intro.intro-playing .intro-caption { animation:intro-text-stable-v30 .8s ease-out 1s both !important; }
+    @keyframes intro-text-stable-v30 { from {opacity:0;} to {opacity:1;} }
+    #intro .intro-timeline i { width:0; animation:none !important; }
+    #intro.intro-playing .intro-timeline i { animation:intro-timer-stable-v30 4s linear both !important; }
+    @keyframes intro-timer-stable-v30 { from {width:0;} to {width:100%;} }
+    @media (prefers-reduced-motion: reduce) {
+      #intro.intro-playing .intro-image,
+      #intro.intro-playing .intro-fit h1,
+      #intro.intro-playing .intro-serial,
+      #intro.intro-playing .intro-caption { animation-duration:.01ms !important; }
+    }
+  </style>
 </head>
 <body>
   <!-- The opening is intentionally replayed on each fresh page load. -->
   <div id="intro" class="intro" role="dialog" aria-modal="true" aria-label="ECDYSIS opening sequence">
-    <img class="intro-image" src="assets/cocoon7.png" alt="" />
+    <img class="intro-image" src="assets/cocoon7-ink.png" alt="" decoding="async" fetchpriority="high" />
     <svg class="intro-threads" id="intro-threads" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
     <div class="intro-title-group">
       <span class="micro intro-serial">THE MEMORY SHEDDING PROTOCOL / 2094</span>
@@ -903,7 +953,7 @@ button:focus-visible, input:focus-visible, [role=slider]:focus-visible { outline
     })();
   </script>
   <script type="module">
-    import('./app.js').then(function () {
+    import('./app.js?v=30').then(function () {
       document.documentElement.dataset.ecdysisReady = 'true';
     }).catch(function (error) {
       console.error('[ECDYSIS] Application startup failed:', error);
