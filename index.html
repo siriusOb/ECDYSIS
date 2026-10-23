@@ -7,8 +7,9 @@
   <meta name="description" content="ECDYSIS / Memory shedding, identity and the right to change." />
   <title>ECDYSIS &#x2014; Molt, until perfect.</title>
   <script>
-    // Only iPhone: make the manifesto image and title flush. Desktop and Android stay unchanged.
+    // V61: only touch-sized phones get the manifesto flush layout.
     if (/iPhone|iPod/i.test(navigator.userAgent)) document.documentElement.classList.add('ecd-iphone');
+    if (/Android/i.test(navigator.userAgent)) document.documentElement.classList.add('ecd-android');
   </script>
 
   <link rel="preload" href="assets/cocoon7-ink.png" as="image" fetchpriority="high" />
@@ -1981,6 +1982,7 @@ body > .footer #replay-intro {
   }
 }
 
+
 /* ================================================================
    ECDYSIS V53 — pigment microspacing, key swatches and typography
    This changes only the interface; specimen colours/rendering are intact.
@@ -2052,16 +2054,33 @@ body > .footer #replay-intro {
 }
 
 
-/* V59: iPhone-only manifesto spacing. Do not change desktop / Android layout. */
+/* V61: Same ID image/title flush & tagline hidden on both mobile OSes.
+   V60 reduced the section-to-MOLT gap for iPhone only; preserve that rule. */
 @media (max-width: 600px) {
-  html.ecd-iphone #view-ecdysis .manifesto { row-gap: 0 !important; }
+  /* V60: remove only the oversized blank space after the manifesto on iPhone. */
+  html.ecd-iphone #view-ecdysis .manifesto {
+    row-gap: 0 !important;
+    min-height: 0 !important;
+  }
   html.ecd-iphone #view-ecdysis .manifesto-image { margin-bottom: 0 !important; padding-bottom: 0 !important; }
   html.ecd-iphone #view-ecdysis .manifesto-text {
     padding-top: 0 !important;
     margin-top: 0 !important;
+    min-height: 0 !important;
   }
   html.ecd-iphone #view-ecdysis .manifesto-text > .micro.subdued:first-child { display: none !important; }
   html.ecd-iphone #view-ecdysis .manifesto-text h3 { margin-top: 0 !important; }
+  /* Keep all MOLT heading styles intact; only reduce the start-of-section gap. */
+  html.ecd-iphone #view-ecdysis .lab-heading { padding-top: 25px !important; }
+}
+/* Android-only: match iPhone's image-to-title spacing and hidden tagline;
+   do not change Android's existing gap before the MOLT section. */
+@media (max-width: 600px) {
+  html.ecd-android #view-ecdysis .manifesto { row-gap: 0 !important; }
+  html.ecd-android #view-ecdysis .manifesto-image { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+  html.ecd-android #view-ecdysis .manifesto-text { padding-top: 0 !important; margin-top: 0 !important; }
+  html.ecd-android #view-ecdysis .manifesto-text > .micro.subdued:first-child { display: none !important; }
+  html.ecd-android #view-ecdysis .manifesto-text h3 { margin-top: 0 !important; }
 }
 /* Android file picker is separate from the site's existing editorial UI. */
 #android-save-dialog[hidden] { display: none !important; }
@@ -2083,7 +2102,7 @@ body > .footer #replay-intro {
 #log-dialog .android-share-controls button[hidden] { display:none !important; }
 #log-dialog .android-share-controls[hidden] { display:none !important; }
 </style>
-  <link rel="stylesheet" href="styles.css?v=59" />
+  <link rel="stylesheet" href="styles.css?v=61" />
   <!-- V30: One stable intro source; animation starts only after ink and type are ready. -->
   <style id="ecdysis-intro-stability-v30">
     #intro .intro-image {
@@ -2275,7 +2294,7 @@ body > .footer #replay-intro {
     })();
   </script>
   <script type="module">
-    import('./app.js?v=59').then(function () {
+    import('./app.js?v=61').then(function () {
       document.documentElement.dataset.ecdysisReady = 'true';
     }).catch(function (error) {
       console.error('[ECDYSIS] Application startup failed:', error);

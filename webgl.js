@@ -4,6 +4,7 @@ const palettes={origin:0,prism:1,shell:2,mint:3,custom:4,monotone:5};
 const defaults={progress:0,modification:0,scale:1,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.6,hue:0,mode:'surface',monoWhite:0};
 const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255);
 const specimenScaleBias=.75;
+const ANDROID_DEVICE=/Android/i.test(navigator.userAgent);
 const STAGE_COUNT=3;
 /* V39: Cyclic mirrored hue drift. 0deg runs A to B, and +/-180deg
  * reverses B to A. There is no sliding gradient beyond the canvas. */
@@ -26,14 +27,23 @@ function orientedGradient(ctx,width,height,stops,hue){
 
 
 /* A safe triangulator that does not stretch concave caps across the specimen. */
-export function parseOBJGeometry(source){
+export function parseOBJGeometry(source,options={}){
  const vertex=[],rawFaces=[];
- for(const raw of source.split(/\r?\n/)){
+ // V61: Android renders a deterministic, spatially distributed subset of the
+ // source OBJ faces.  The original assets are never modified.  Triangulation,
+ // normals, UVs, and GPU uploads for unselected faces are avoided entirely.
+ const sourceLines=source.split(/\r?\n/);
+ const mobileLOD=Boolean(options.mobileLOD);
+ const sourceFaces=mobileLOD?sourceLines.reduce((n,l)=>n+(l.startsWith('f ')?1:0),0):0;
+ const faceStride=mobileLOD?Math.max(1,Math.ceil(sourceFaces/26000)):1;
+ let faceOrdinal=0;
+ for(const raw of sourceLines){
   const l=raw.trim();
   if(l.startsWith('v ')){
    const v=l.split(/\s+/).slice(1,4).map(Number);
    if(v.length===3&&v.every(Number.isFinite))vertex.push(v);
   }else if(l.startsWith('f ')){
+   if(mobileLOD && (faceOrdinal++ % faceStride !== 0)) continue;
    const f=[];
    for(const part of l.slice(2).split(/\s+/)){
     const id=parseInt(part.split('/')[0],10);
@@ -156,18 +166,18 @@ export function parseOBJGeometry(source){
 
 /* Big OBJ parsing runs off the UI thread when possible. */
 let worker=null,seq=0;const jobs=new Map();
-export function parseOBJAsync(text){
- if(typeof Worker==='undefined')return Promise.resolve().then(()=>parseOBJGeometry(text));
+export function parseOBJAsync(text,options={}){
+ if(typeof Worker==='undefined')return Promise.resolve().then(()=>parseOBJGeometry(text,options));
  try{
   if(!worker){
-   const src=`import {parseOBJGeometry} from ${JSON.stringify(import.meta.url)};self.onmessage=e=>{const {id,text}=e.data;try{const g=parseOBJGeometry(text);self.postMessage({id,g},[g.pos.buffer,g.uv.buffer,g.norm.buffer,g.tri.buffer,g.lines.buffer]);}catch(err){self.postMessage({id,error:String(err)});}}`;
+   const src=`import {parseOBJGeometry} from ${JSON.stringify(import.meta.url)};self.onmessage=e=>{const {id,text,options}=e.data;try{const g=parseOBJGeometry(text,options);self.postMessage({id,g},[g.pos.buffer,g.uv.buffer,g.norm.buffer,g.tri.buffer,g.lines.buffer]);}catch(err){self.postMessage({id,error:String(err)});}}`;
    const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
    worker=new Worker(url,{type:'module'});setTimeout(()=>URL.revokeObjectURL(url),15000);
    worker.onmessage=e=>{const j=jobs.get(e.data.id);if(!j)return;jobs.delete(e.data.id);e.data.error?j.reject(Error(e.data.error)):j.resolve(e.data.g);};
    worker.onerror=e=>{for(const j of jobs.values())j.reject(Error('OBJ worker failed'));jobs.clear();worker.terminate();worker=null;};
   }
-  return new Promise((resolve,reject)=>{const id=++seq;jobs.set(id,{resolve,reject});worker.postMessage({id,text});});
- }catch{return Promise.resolve().then(()=>parseOBJGeometry(text));}
+  return new Promise((resolve,reject)=>{const id=++seq;jobs.set(id,{resolve,reject});worker.postMessage({id,text,options});});
+ }catch{return Promise.resolve().then(()=>parseOBJGeometry(text,options));}
 }
 
 /* Construct source alpha ONE TIME per image. Avoid per-frame pixel loops. */
@@ -620,7 +630,7 @@ function stableStageWeights(progress,counts){
 }
 
 export class Specimen3D{
- constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:true,preserveDrawingBuffer:true,premultipliedAlpha:false});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','verticalRatio','stageOffsetY','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=0;this.pitch=0;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
+ constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:!ANDROID_DEVICE,preserveDrawingBuffer:true,premultipliedAlpha:false});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','verticalRatio','stageOffsetY','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=0;this.pitch=0;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
   canvas.addEventListener('pointerdown',e=>{
    this.drag={x:e.clientX,y:e.clientY,yaw:this.yaw,pitch:this.pitch};
    canvas.setPointerCapture(e.pointerId);
@@ -648,7 +658,17 @@ export class Specimen3D{
  isFast(){return Boolean(this.drag || this.autoFast);}
  requestDraw(){
   if(this.drawPending)return;
-  this.drawPending=requestAnimationFrame(()=>{this.drawPending=0;this.draw();});
+  const paint=t=>{
+   // Cap Android interactive GPU/CPU draws near 18fps without adding delays
+   // to PNG exports (exportCanvas continues to draw immediately).
+   if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<55){
+    this.drawPending=requestAnimationFrame(paint);return;
+   }
+   this.drawPending=0;
+   this.lastInteractivePaint=t;
+   this.draw();
+  };
+  this.drawPending=requestAnimationFrame(paint);
  }
  setInteractiveMode(value){
   const next=Boolean(value);
@@ -672,12 +692,12 @@ export class Specimen3D{
   const ext=gl.getExtension('EXT_texture_filter_anisotropic')||gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
   if(ext){const max=gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);gl.texParameterf(gl.TEXTURE_2D,ext.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(8,max));}
   this.draw();}
- setParams(next){const old=this.params.progress;Object.assign(this.params,next);if('progress' in next&&old!==next.progress){const stage=p=>Math.min(STAGE_COUNT-1,Math.floor(p/100*(STAGE_COUNT-1)+1e-7));if(stage(old)!==stage(next.progress)){this.flashAt=performance.now();this.scheduleGlow();}}this.draw();}
- scheduleGlow(){if(this.flashFrame)return;const frame=t=>{this.flashFrame=0;this.draw();if(t-this.flashAt<440)this.flashFrame=requestAnimationFrame(frame);};this.flashFrame=requestAnimationFrame(frame);}
+ setParams(next){const old=this.params.progress;Object.assign(this.params,next);if('progress' in next&&old!==next.progress){const stage=p=>Math.min(STAGE_COUNT-1,Math.floor(p/100*(STAGE_COUNT-1)+1e-7));if(stage(old)!==stage(next.progress)){this.flashAt=performance.now();this.scheduleGlow();}}if(ANDROID_DEVICE)this.requestDraw();else this.draw();}
+ scheduleGlow(){if(ANDROID_DEVICE){this.requestDraw();return;}if(this.flashFrame)return;const frame=t=>{this.flashFrame=0;this.draw();if(t-this.flashAt<440)this.flashFrame=requestAnimationFrame(frame);};this.flashFrame=requestAnimationFrame(frame);}
  resize(){
   const r=this.canvas.getBoundingClientRect();
   // Retina browsers otherwise shade millions of extra pixels per frame.
-  const dpr=Math.min(1.45,window.devicePixelRatio||1);
+  const dpr=Math.min(ANDROID_DEVICE?0.95:1.45,window.devicePixelRatio||1);
   const w=Math.max(2,Math.round(r.width*dpr)),h=Math.max(2,Math.round(r.height*dpr));
   if(w!==this.canvas.width||h!==this.canvas.height){this.canvas.width=w;this.canvas.height=h;}
   this.requestDraw();
@@ -757,7 +777,15 @@ export class SpecimenSoftware3D {
 
   requestDraw(){
     if(this.drawPending)return;
-    this.drawPending=requestAnimationFrame(()=>{this.drawPending=0;this.draw();});
+    const paint=t=>{
+      if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<65){
+        this.drawPending=requestAnimationFrame(paint);return;
+      }
+      this.drawPending=0;
+      this.lastInteractivePaint=t;
+      this.draw();
+    };
+    this.drawPending=requestAnimationFrame(paint);
   }
   setInteractiveMode(value){this.autoFast=Boolean(value);this.requestDraw();}
 
@@ -773,7 +801,7 @@ export class SpecimenSoftware3D {
     const normals = geometry.norm;
     const indices = geometry.tri;
     const faces = indices.length / 3;
-    const target = 3400;
+    const target = ANDROID_DEVICE?900:3400;
     const step = Math.max(1, Math.floor(faces / target));
     const seen = new Set();
     const points = [];
@@ -794,7 +822,7 @@ export class SpecimenSoftware3D {
       if (seen.has(key)) continue;
       seen.add(key);
       points.push({x,y,z,nx,ny,nz,id:face});
-      if (points.length >= 3600) break;
+      if (points.length >= (ANDROID_DEVICE?1000:3600)) break;
     }
     if (!points.length) throw new Error('OBJ has no renderable surface samples');
     this.meshes[i] = points;
@@ -805,7 +833,7 @@ export class SpecimenSoftware3D {
     const recolour = ['palette','inkA','inkB','hue','intensity'].some(k => k in value && value[k] !== this.params[k]);
     Object.assign(this.params,value);
     if (recolour) this.tintCache.clear();
-    this.draw();
+    if(ANDROID_DEVICE)this.requestDraw();else this.draw();
   }
 
   atlasForStage(i) {
@@ -837,7 +865,7 @@ export class SpecimenSoftware3D {
 
   resize() {
     const r = this.canvas.getBoundingClientRect();
-    const ratio = Math.min(1.25,window.devicePixelRatio||1);
+    const ratio = Math.min(ANDROID_DEVICE?0.9:1.25,window.devicePixelRatio||1);
     const w = Math.max(2,Math.round(r.width*ratio));
     const h = Math.max(2,Math.round(r.height*ratio));
     if (w !== this.canvas.width || h !== this.canvas.height) {

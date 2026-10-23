@@ -1,5 +1,5 @@
 /* ECDYSIS V27 — independent 2D/3D scales (2D 1.30, 3D 0.75) */
-import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=59';
+import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=61';
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 const IS_ANDROID=/Android/i.test(navigator.userAgent);
 const names=['COCOON','HATCH','MOLT'];
@@ -39,7 +39,9 @@ else dim.insertAdjacentElement('afterend',backdropControl);
 const orbitControl=$('#toggle-rotate');
 if(orbitControl){const orbitMount=$('#orbit-mount');if(orbitMount)orbitMount.appendChild(orbitControl);else dim.insertAdjacentElement('afterend',orbitControl);}
 const modeBackgrounds={'2d':'beige','3d':'black'};
-const modeOrbits={'2d':false,'3d':true};
+// Android starts with 3D auto-orbit paused to prevent continuous GPU load.
+// Manual drag and the ORBIT toggle remain available.
+const modeOrbits={'2d':false,'3d':!IS_ANDROID};
 const specimenStage=$('#view-molt .canvas-stage');
 if(specimenStage)specimenStage.dataset.dimension=dimension;
 let canvasBackground='beige';
@@ -250,7 +252,7 @@ async function loadModels(){
   try{
    const res=await fetch('assets/'+file,{cache:'no-store'});
    if(!res.ok)throw Error('HTTP '+res.status+' '+file);
-   const g=await parseOBJAsync(await res.text());
+   const g=await parseOBJAsync(await res.text(),{mobileLOD:IS_ANDROID});
    threeD?.setMesh(i,g);
    loaded++;
    console.info('[ECDYSIS] '+file+': '+(g.pos.length/3)+' vertices, '+(g.tri.length/3)+' triangles');
@@ -328,7 +330,7 @@ $$('[data-param]').forEach(inp=>inp.addEventListener('input',()=>{state[inp.data
 $$('[data-mode]').forEach(b=>b.addEventListener('click',()=>{state.mode=b.dataset.mode;updateUI();render();}));
 $$('[data-palette]').forEach(b=>b.addEventListener('click',()=>{state.palette=b.dataset.palette;updateUI();render();}));
 for(const [selector,key] of [['#color-a','inkA'],['#color-b','inkB']])$(selector).addEventListener('input',e=>{state[key]=e.target.value;state.palette='custom';updateUI();if(!inputRAF)inputRAF=requestAnimationFrame(()=>{inputRAF=0;render();});});
-$('#reset-all').addEventListener('click',()=>{playing=false;dimensionScales['2d']=1.3;dimensionScales['3d']=0.75;modeBackgrounds['2d']='beige';modeBackgrounds['3d']='black';modeOrbits['2d']=false;modeOrbits['3d']=true;state={...DEFAULT,scale:dimensionScales[dimension],rotate:modeOrbits[dimension]};if(twoD){twoD.zoom=1;twoD.angle=0;}if(threeD){threeD.zoom=1;threeD.yaw=0;threeD.pitch=0;threeD.setInteractiveMode?.(dimension==='3d'&&state.rotate);}setCanvasBackground(modeBackgrounds[dimension]);updateUI();render();animate();toast('RESET / ORIGIN RESTORED');});
+$('#reset-all').addEventListener('click',()=>{playing=false;dimensionScales['2d']=1.3;dimensionScales['3d']=0.75;modeBackgrounds['2d']='beige';modeBackgrounds['3d']='black';modeOrbits['2d']=false;modeOrbits['3d']=!IS_ANDROID;state={...DEFAULT,scale:dimensionScales[dimension],rotate:modeOrbits[dimension]};if(twoD){twoD.zoom=1;twoD.angle=0;}if(threeD){threeD.zoom=1;threeD.yaw=0;threeD.pitch=0;threeD.setInteractiveMode?.(dimension==='3d'&&state.rotate);}setCanvasBackground(modeBackgrounds[dimension]);updateUI();render();animate();toast('RESET / ORIGIN RESTORED');});
 $('#toggle-rotate').addEventListener('click',()=>{state.rotate=!state.rotate;modeOrbits[dimension]=state.rotate;threeD?.setInteractiveMode?.(state.rotate&&dimension==='3d');updateUI();animate();});
 // UNFOLD CYCLE: pointerdown is immediate on mouse/touch, with click
 // fallback for keyboard. 100% restarts from the initial COCOON state.
@@ -360,11 +362,11 @@ function animate(){
    if(t===1){playing=false;updateUI();}
   }
   if(state.rotate && (dimension==='3d'?Boolean(threeD):Boolean(twoD))){
-   const dt=lastOrbitTime?Math.min(70,now-lastOrbitTime):16.7;
+   const dt=lastOrbitTime?Math.min(IS_ANDROID?150:70,now-lastOrbitTime):16.7;
    if(dimension==='3d')threeD.yaw+=(dt*.00024);
    else twoD.angle=(twoD.angle||0)+dt*.00021;
    lastOrbitTime=now;
-   if(now-lastOrbitPaint>=32){
+   if(now-lastOrbitPaint>=(IS_ANDROID?85:32)){
     lastOrbitPaint=now;
     if(dimension==='3d'){if(typeof threeD.requestDraw==='function')threeD.requestDraw();else threeD.draw();}
     else twoD.draw();
@@ -379,7 +381,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&(playing|
 /* Export settings retained from V7. */
 const wrap=$('#export-wrap'),exportBtn=$('#export-png');function toggleMenu(open){wrap.classList.toggle('open',open);exportBtn.setAttribute('aria-expanded',String(open));}
 exportBtn.addEventListener('click',()=>toggleMenu(!wrap.classList.contains('open')));document.addEventListener('pointerdown',e=>{if(!wrap.contains(e.target))toggleMenu(false);});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleMenu(false);});
-async function exportPNG(kind){try{const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}const src=renderer.exportCanvas(),out=document.createElement('canvas');out.width=Math.min(2400,Math.max(1400,src.width));out.height=Math.round(out.width*src.height/src.width);const ctx=out.getContext('2d');if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';ctx.fillRect(0,0,out.width,out.height);}ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';drawExportSpecimen(ctx,src,0,0,out.width,out.height);if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';ctx.font=`${Math.round(out.width*.018)}px monospace`;ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);ctx.textAlign='right';ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);}const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`;if(IS_ANDROID){showAndroidSave(blob,filename);return;}const file=new File([blob],filename,{type:'image/png'});if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}outputFile(blob,filename);toast('PNG EXPORTED');}catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}}
+async function exportPNG(kind){try{const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}const src=renderer.exportCanvas(),out=document.createElement('canvas');out.width=IS_ANDROID?Math.min(960,Math.max(640,src.width)):Math.min(2400,Math.max(1400,src.width));out.height=Math.round(out.width*src.height/src.width);const ctx=out.getContext('2d');if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';ctx.fillRect(0,0,out.width,out.height);}ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';drawExportSpecimen(ctx,src,0,0,out.width,out.height);if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';ctx.font=`${Math.round(out.width*.018)}px monospace`;ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);ctx.textAlign='right';ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);}const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`;if(IS_ANDROID){showAndroidSave(blob,filename);return;}const file=new File([blob],filename,{type:'image/png'});if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}outputFile(blob,filename);toast('PNG EXPORTED');}catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}}
 $$('[data-export]').forEach(b=>b.addEventListener('click',()=>{toggleMenu(false);void exportPNG(b.dataset.export);}));
 
 /* ECDYSIS V33 / reliable motion LOG.
@@ -388,7 +390,11 @@ $$('[data-export]').forEach(b=>b.addEventListener('click',()=>{toggleMenu(false)
 // Mobile GIF frames are kept in memory before encoding; limit Android peak RAM.
 // Desktop + Apple export quality/length remain unchanged.
 const LOG_FPS=30, GIF_FPS=8, GIF_WIDTH=960, MAX_LOG_SECONDS=60;
-const ANDROID_GIF_FPS=6, ANDROID_GIF_WIDTH=600, ANDROID_MAX_LOG_SECONDS=30;
+// Android uses bounded capture buffers rather than running a second large
+// pixel-processing loop while its 3D GPU is busy.
+const ANDROID_GIF_FPS=3, ANDROID_GIF_WIDTH=360, ANDROID_MAX_LOG_SECONDS=12;
+const ANDROID_VIDEO_FPS=12;
+
 /* V37: GIF quality 960px with spatial ordered dithering, stable palette.
    GIF has only 256 colours. The old RGB332 palette encoded beige
    #e8dec4 as pink #ffdbff. Use a finer 216-colour cube + 40 precisely
@@ -650,7 +656,7 @@ function gifFromFrames(frames,width,height,delay){
 function showLogChoices(gif,video,seconds,videoFormat,gifFps){
  logReady={gif,video,videoFormat};
  const videoLabel=videoFormat?.label||'VIDEO';
- $('#log-dialog-details').textContent=`${logClock(seconds)} recorded / ${gifFps} FPS GIF / ${LOG_FPS} FPS video`;
+ $('#log-dialog-details').textContent=`${logClock(seconds)} recorded / ${gifFps} FPS GIF / ${IS_ANDROID?ANDROID_VIDEO_FPS:LOG_FPS} FPS video`;
  const gifButton=$('#download-gif'),videoButton=$('#download-mp4');
  gifButton.disabled=!gif;
  videoButton.disabled=!video;
@@ -675,7 +681,7 @@ async function startLog(){
  try{
   const source=active().exportCanvas();
   if(!source?.width||!source?.height)throw Error('Image canvas is not ready');
-  const width=IS_ANDROID?960:1440; // Preserve desktop/iOS 1440px; Android reduces encoder load.
+  const width=IS_ANDROID?640:1440; // Preserve desktop/iOS 1440px; Android reduces encoder load.
   const height=Math.max(2,2*Math.round(width*source.height/source.width/2));
   const output=document.createElement('canvas');output.width=width;output.height=height;
   const ctx=output.getContext('2d',{alpha:false});
@@ -687,7 +693,7 @@ async function startLog(){
   const gifCtx=gifOutput.getContext('2d',{willReadFrequently:true});
   if(gifCtx){gifCtx.imageSmoothingEnabled=true;gifCtx.imageSmoothingQuality='high';}
   if(!ctx||!gifCtx)throw Error('Canvas capture is not supported');
-  session={output,ctx,gifOutput,gifCtx,gifFps,maxLogSeconds,videoFormat:null,frames:[],start:performance.now(),nextGifTime:0,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};
+  session={output,ctx,gifOutput,gifCtx,gifFps,maxLogSeconds,videoFormat:null,frames:[],start:performance.now(),nextGifTime:0,lastPaintTime:-Infinity,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};
   logSession=session;
   logReady={gif:null,video:null,videoFormat:null};
   logDialog.hidden=true;
@@ -696,11 +702,14 @@ async function startLog(){
   session.nextGifTime=1000/session.gifFps;
   // Video is OPTIONAL: GIF capture must continue if the browser lacks MediaRecorder.
   const formats=availableVideoFormats();
+  // On Android prefer hardware-backed VP8/H.264 when available; retain the
+  // original format auto-detection and correct output extension.
+  if(IS_ANDROID)formats.sort((x,y)=>((x.type.includes('vp8')?0:x.type.startsWith('video/mp4')?1:2)-(y.type.includes('vp8')?0:y.type.startsWith('video/mp4')?1:2)));
   if(formats.length&&typeof output.captureStream==='function'){
    try{
-    session.stream=output.captureStream(LOG_FPS);
+    session.stream=output.captureStream(IS_ANDROID?ANDROID_VIDEO_FPS:LOG_FPS);
     let recorder=null;
-    const rates=IS_ANDROID?[4500000,3000000,2000000]:[12000000,8500000,6000000];
+    const rates=IS_ANDROID?[1800000,1100000,700000]:[12000000,8500000,6000000];
     for(const format of formats){
      if(recorder)break;
      for(const bps of rates){
@@ -746,7 +755,12 @@ async function startLog(){
    const elapsed=Math.max(0,performance.now()-session.start);
    const current=dimension==='3d'?canvas3D:canvas2D;
    try{
-    composeLogFrame(session,current);
+    // V61: Android composites 12 frames/second, not every 60Hz browser tick.
+    // The GIF snapshot runs only at 3fps on those already-composited frames.
+    if(!IS_ANDROID || elapsed-session.lastPaintTime>=1000/ANDROID_VIDEO_FPS){
+     composeLogFrame(session,current);
+     session.lastPaintTime=elapsed;
+    }
     if(elapsed>=session.nextGifTime){
      gifSnapshot(session);
      session.nextGifTime=elapsed+1000/session.gifFps;
