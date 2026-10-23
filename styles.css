@@ -2033,3 +2033,35 @@
     display: none !important;
   }
   
+  
+  /* V59: iPhone-only manifesto spacing. Do not change desktop / Android layout. */
+  @media (max-width: 600px) {
+    html.ecd-iphone #view-ecdysis .manifesto { row-gap: 0 !important; }
+    html.ecd-iphone #view-ecdysis .manifesto-image { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+    html.ecd-iphone #view-ecdysis .manifesto-text {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    html.ecd-iphone #view-ecdysis .manifesto-text > .micro.subdued:first-child { display: none !important; }
+    html.ecd-iphone #view-ecdysis .manifesto-text h3 { margin-top: 0 !important; }
+  }
+  /* Android file picker is separate from the site's existing editorial UI. */
+  #android-save-dialog[hidden] { display: none !important; }
+  #android-save-dialog { position: fixed; inset: 0; z-index: 12000; display: flex;
+    justify-content: center; align-items: center; padding: 24px; background: rgba(8,9,11,.74); }
+  #android-save-dialog .android-save-card { max-width: 420px; width: 100%; background: #fffaee;
+    color: #72092a; border: 1px solid #72092a; padding: 25px 22px; box-shadow: 0 16px 48px #0005; }
+  #android-save-dialog .android-save-title { font: 22px/1.1 var(--gothic), Georgia, serif; margin: 8px 0 14px; }
+  #android-save-dialog .android-save-filename { font: 11px/1.5 var(--mono), monospace; color:#6b5e5a;
+    overflow-wrap:anywhere; margin-bottom: 22px; }
+  #android-save-dialog .android-save-actions { display: grid; grid-template-columns:1fr 1fr; gap: 10px; }
+  #android-save-dialog button { cursor:pointer; border: 1px solid #72092a; min-height: 46px;
+    background:#fffaee; color:#72092a; font: 12px var(--mono), monospace; }
+  #android-save-dialog #android-save-download { background:#72092a; color:#fffaee; }
+  #android-save-dialog #android-save-close { margin-top: 12px; width:100%; border-color:transparent; }
+  #log-dialog .android-share-controls { display:flex; flex-wrap:wrap; gap: 8px; margin-top:10px; }
+  #log-dialog .android-share-controls button { background:transparent; color:#72092a;
+    border:1px solid #72092a; padding:9px 12px; font:11px var(--mono),monospace; }
+  #log-dialog .android-share-controls button[hidden] { display:none !important; }
+  #log-dialog .android-share-controls[hidden] { display:none !important; }
+  

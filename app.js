@@ -1,6 +1,7 @@
 /* ECDYSIS V27 — independent 2D/3D scales (2D 1.30, 3D 0.75) */
-import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=58';
+import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=59';
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
+const IS_ANDROID=/Android/i.test(navigator.userAgent);
 const names=['COCOON','HATCH','MOLT'];
 const STAGE_COUNT=names.length;
 const stageProgress=index=>Math.round(100*index/(STAGE_COUNT-1));
@@ -378,13 +379,16 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&(playing|
 /* Export settings retained from V7. */
 const wrap=$('#export-wrap'),exportBtn=$('#export-png');function toggleMenu(open){wrap.classList.toggle('open',open);exportBtn.setAttribute('aria-expanded',String(open));}
 exportBtn.addEventListener('click',()=>toggleMenu(!wrap.classList.contains('open')));document.addEventListener('pointerdown',e=>{if(!wrap.contains(e.target))toggleMenu(false);});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleMenu(false);});
-async function exportPNG(kind){try{const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}const src=renderer.exportCanvas(),out=document.createElement('canvas');out.width=Math.min(2400,Math.max(1400,src.width));out.height=Math.round(out.width*src.height/src.width);const ctx=out.getContext('2d');if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';ctx.fillRect(0,0,out.width,out.height);}ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';drawExportSpecimen(ctx,src,0,0,out.width,out.height);if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';ctx.font=`${Math.round(out.width*.018)}px monospace`;ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);ctx.textAlign='right';ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);}const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`,file=new File([blob],filename,{type:'image/png'});if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('PNG EXPORTED');}catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}}
+async function exportPNG(kind){try{const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}const src=renderer.exportCanvas(),out=document.createElement('canvas');out.width=Math.min(2400,Math.max(1400,src.width));out.height=Math.round(out.width*src.height/src.width);const ctx=out.getContext('2d');if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';ctx.fillRect(0,0,out.width,out.height);}ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';drawExportSpecimen(ctx,src,0,0,out.width,out.height);if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';ctx.font=`${Math.round(out.width*.018)}px monospace`;ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);ctx.textAlign='right';ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);}const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`;if(IS_ANDROID){showAndroidSave(blob,filename);return;}const file=new File([blob],filename,{type:'image/png'});if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}outputFile(blob,filename);toast('PNG EXPORTED');}catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}}
 $$('[data-export]').forEach(b=>b.addEventListener('click',()=>{toggleMenu(false);void exportPNG(b.dataset.export);}));
 
 /* ECDYSIS V33 / reliable motion LOG.
    GIF is encoded locally in a worker with an inline main-thread fallback.
    MP4 recording is optional and cannot prevent GIF export. */
+// Mobile GIF frames are kept in memory before encoding; limit Android peak RAM.
+// Desktop + Apple export quality/length remain unchanged.
 const LOG_FPS=30, GIF_FPS=8, GIF_WIDTH=960, MAX_LOG_SECONDS=60;
+const ANDROID_GIF_FPS=6, ANDROID_GIF_WIDTH=600, ANDROID_MAX_LOG_SECONDS=30;
 /* V37: GIF quality 960px with spatial ordered dithering, stable palette.
    GIF has only 256 colours. The old RGB332 palette encoded beige
    #e8dec4 as pink #ffdbff. Use a finer 216-colour cube + 40 precisely
@@ -423,7 +427,7 @@ function getGifColorLookup(){
  gifColorLookup=lookup;
  return lookup;
 }
-let logSession=null,logReady={gif:null,mp4:null};
+let logSession=null,logReady={gif:null,video:null,videoFormat:null};
 const logBtn=$('#log-toggle'),logLabel=$('#log-label');
 let logMode='idle';
 const logDialog=$('#log-dialog');
@@ -434,19 +438,26 @@ function setLogButton(stage){
  logBtn.classList.toggle('is-recording',stage==='recording');
  logBtn.setAttribute('aria-pressed',String(stage==='recording'));
  logLabel.textContent=stage==='processing'?'LOADING...':stage==='recording'?logClock(logSession?(performance.now()-logSession.start)/1000:0):'MOTION ARCHIVE';
- logBtn.title=stage==='recording'?'Click again to stop recording':stage==='processing'?'Preparing GIF and MP4':'Start motion recording';
+ logBtn.title=stage==='recording'?'Click again to stop recording':stage==='processing'?'Preparing GIF and video':'Start motion recording';
 }
 function updateLogClock(session){
  if(logSession!==session || logMode!=='recording')return;
  logLabel.textContent=logClock((performance.now()-session.start)/1000);
 }
-function preferredMP4(){
- if(typeof MediaRecorder==='undefined')return null;
- for(const type of ['video/mp4;codecs="avc1.42E01E"','video/mp4;codecs=avc1.42E01E','video/mp4']){
-  try{if(MediaRecorder.isTypeSupported(type))return type;}catch{}
- }
- return null;
+// Different browser engines expose different encoders. Never pretend a WebM is MP4.
+function availableVideoFormats(){
+ if(typeof MediaRecorder==='undefined')return [];
+ const formats=[
+  {type:'video/mp4;codecs="avc1.42E01E"',extension:'mp4',label:'MP4'},
+  {type:'video/mp4;codecs=avc1.42E01E',extension:'mp4',label:'MP4'},
+  {type:'video/mp4',extension:'mp4',label:'MP4'},
+  {type:'video/webm;codecs=vp9',extension:'webm',label:'WEBM'},
+  {type:'video/webm;codecs=vp8',extension:'webm',label:'WEBM'},
+  {type:'video/webm',extension:'webm',label:'WEBM'}
+ ];
+ return formats.filter(f=>{try{return MediaRecorder.isTypeSupported(f.type);}catch{return false;}});
 }
+
 /* V42: canvas export composition must NEVER stretch a specimen when its
  * viewport changes from a square to a wide rectangle (or is resized mid-LOG).
  * Use centered contain fitting for the current rendered canvas dimensions. */
@@ -466,10 +477,49 @@ function composeLogFrame(session,source){
  drawExportSpecimen(ctx,source,0,0,w,h);
 }
 function outputFile(blob,filename){
+ if(!(blob instanceof Blob)||!blob.size){toast('EXPORT FILE IS EMPTY');return;}
  const url=URL.createObjectURL(blob),link=document.createElement('a');
- link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
+ link.href=url;link.download=filename;link.style.display='none';document.body.appendChild(link);
+ // This runs synchronously inside a real tap/click on Android/Windows.
+ link.click();link.remove();
  setTimeout(()=>URL.revokeObjectURL(url),120000);
+ if(IS_ANDROID)toast('DOWNLOAD STARTED / CHECK DOWNLOADS');
 }
+// Android native share must start from a fresh user tap (not after async toBlob()).
+async function androidShareFile(blob,filename){
+ if(typeof navigator.share!=='function' || typeof File!=='function'){
+  toast('SHARE UNAVAILABLE / USE DOWNLOAD');return;
+ }
+ try{
+  const file=new File([blob],filename,{type:blob.type||'application/octet-stream'});
+  if(typeof navigator.canShare==='function'&&!navigator.canShare({files:[file]})){
+   toast('THIS FILE CANNOT BE SHARED / USE DOWNLOAD');return;
+  }
+  await navigator.share({files:[file]});
+ }catch(error){
+  if(error?.name==='AbortError')return;
+  console.warn('[ECDYSIS] Native sharing failed:',error);
+  toast('SHARE UNAVAILABLE / USE DOWNLOAD');
+ }
+}
+let pendingAndroidFile=null;
+const androidSaveDialog=$('#android-save-dialog');
+function showAndroidSave(blob,filename){
+ if(!IS_ANDROID||!androidSaveDialog){outputFile(blob,filename);return;}
+ pendingAndroidFile={blob,filename};
+ $('#android-save-filename').textContent=filename;
+ androidSaveDialog.hidden=false;
+ $('#android-save-download').focus();
+}
+$('#android-save-download')?.addEventListener('click',()=>{
+ if(pendingAndroidFile)outputFile(pendingAndroidFile.blob,pendingAndroidFile.filename);
+ androidSaveDialog.hidden=true;
+});
+$('#android-save-share')?.addEventListener('click',()=>{
+ if(pendingAndroidFile)void androidShareFile(pendingAndroidFile.blob,pendingAndroidFile.filename);
+});
+$('#android-save-close')?.addEventListener('click',()=>{androidSaveDialog.hidden=true;pendingAndroidFile=null;});
+
 /* Each frame is a compact RGB332 palette index, not a large RGBA image. */
 function gifSnapshot(session){
  const {gifOutput,gifCtx,output}=session;
@@ -597,15 +647,26 @@ function gifFromFrames(frames,width,height,delay){
   }catch(err){fallback(err);}
  });
 }
-function showLogChoices(gif,mp4,seconds){
- logReady={gif,mp4};
- $('#log-dialog-details').textContent=`${logClock(seconds)} recorded / ${GIF_FPS} FPS GIF / ${LOG_FPS} FPS video`;
- const gifButton=$('#download-gif'),mp4Button=$('#download-mp4');
+function showLogChoices(gif,video,seconds,videoFormat,gifFps){
+ logReady={gif,video,videoFormat};
+ const videoLabel=videoFormat?.label||'VIDEO';
+ $('#log-dialog-details').textContent=`${logClock(seconds)} recorded / ${gifFps} FPS GIF / ${LOG_FPS} FPS video`;
+ const gifButton=$('#download-gif'),videoButton=$('#download-mp4');
  gifButton.disabled=!gif;
- mp4Button.disabled=!mp4;
- $('#log-dialog-note').textContent=gif&&mp4?'Choose GIF or MP4. Both preserve background and color changes.':gif?'GIF is ready. MP4 recording is unsupported or unavailable in this browser.':mp4?'MP4 is ready. GIF export could not be completed.':'No recording format is available.';
+ videoButton.disabled=!video;
+ // The second button is reused, but accurately labels the browser's actual container.
+ videoButton.innerHTML=`${videoLabel} &#x2197;<span>VIDEO RECORDING</span>`;
+ $('#log-dialog-note').textContent=gif&&video
+  ?videoLabel==='WEBM'?'This browser records WebM, not MP4. Both GIF and WEBM are ready.':'Choose GIF or MP4. Both preserve background and color changes.'
+  :gif?'GIF is ready. No compatible browser video recorder is available.'
+  :video?`${videoLabel} is ready. GIF export could not be completed.`:'No recording format is available.';
+ if(IS_ANDROID){
+  $('#android-share-controls').hidden=false;
+  $('#android-share-gif').hidden=!gif;
+  $('#android-share-video').hidden=!video;
+ }
  logDialog.hidden=false;
- (gif?gifButton:mp4Button).focus();
+ (gif?gifButton:videoButton).focus();
 }
 async function startLog(){
  if(logSession)return;
@@ -614,50 +675,64 @@ async function startLog(){
  try{
   const source=active().exportCanvas();
   if(!source?.width||!source?.height)throw Error('Image canvas is not ready');
-  const width=1440; // V44: high-definition MP4 canvas (GIF still uses GIF_WIDTH=960)
+  const width=IS_ANDROID?960:1440; // Preserve desktop/iOS 1440px; Android reduces encoder load.
   const height=Math.max(2,2*Math.round(width*source.height/source.width/2));
   const output=document.createElement('canvas');output.width=width;output.height=height;
   const ctx=output.getContext('2d',{alpha:false});
-  const gifOutput=document.createElement('canvas');gifOutput.width=GIF_WIDTH;
-  gifOutput.height=Math.max(2,Math.round(height*GIF_WIDTH/width));
+  const gifWidth=IS_ANDROID?ANDROID_GIF_WIDTH:GIF_WIDTH;
+  const gifFps=IS_ANDROID?ANDROID_GIF_FPS:GIF_FPS;
+  const maxLogSeconds=IS_ANDROID?ANDROID_MAX_LOG_SECONDS:MAX_LOG_SECONDS;
+  const gifOutput=document.createElement('canvas');gifOutput.width=gifWidth;
+  gifOutput.height=Math.max(2,Math.round(height*gifWidth/width));
   const gifCtx=gifOutput.getContext('2d',{willReadFrequently:true});
   if(gifCtx){gifCtx.imageSmoothingEnabled=true;gifCtx.imageSmoothingQuality='high';}
   if(!ctx||!gifCtx)throw Error('Canvas capture is not supported');
-  session={output,ctx,gifOutput,gifCtx,frames:[],start:performance.now(),nextGifTime:0,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};
+  session={output,ctx,gifOutput,gifCtx,gifFps,maxLogSeconds,videoFormat:null,frames:[],start:performance.now(),nextGifTime:0,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};
   logSession=session;
-  logReady={gif:null,mp4:null};
+  logReady={gif:null,video:null,videoFormat:null};
   logDialog.hidden=true;
   composeLogFrame(session,source);
   try{gifSnapshot(session);}catch(error){console.warn('[ECDYSIS] Initial LOG snapshot unavailable; retrying during recording:',error);}
-  session.nextGifTime=1000/GIF_FPS;
-  // Canvas capture is OPTIONAL: GIF must work without MediaRecorder or captureStream.
-  const format=preferredMP4();
-  if(format&&typeof output.captureStream==='function'){
+  session.nextGifTime=1000/session.gifFps;
+  // Video is OPTIONAL: GIF capture must continue if the browser lacks MediaRecorder.
+  const formats=availableVideoFormats();
+  if(formats.length&&typeof output.captureStream==='function'){
    try{
     session.stream=output.captureStream(LOG_FPS);
-    // Safari encoders differ in supported bitrates. Try a quality ladder.
-    let recorder=null,actualBitrate=0;
-    for(const bps of [12000000,8500000,6000000]){
+    let recorder=null;
+    const rates=IS_ANDROID?[4500000,3000000,2000000]:[12000000,8500000,6000000];
+    for(const format of formats){
+     if(recorder)break;
+     for(const bps of rates){
       try{
-        const candidate=new MediaRecorder(session.stream,{mimeType:format,videoBitsPerSecond:bps});
-        const done=new Promise((resolve,reject)=>{
-          candidate.ondataavailable=e=>{if(e.data?.size)session.chunks.push(e.data);};
-          candidate.onstop=()=>resolve(new Blob(session.chunks,{type:'video/mp4'}));
-          candidate.onerror=e=>reject(Error(e.error?.message||'MP4 recorder failed'));
-        });
-        candidate.start(1000);
-        recorder=candidate;
-        session.recordDone=done;
-        actualBitrate=bps;
-        break;
-      }catch(error){console.warn('[ECDYSIS] MP4 bitrate not accepted:',bps,error);}
+       const candidate=new MediaRecorder(session.stream,{mimeType:format.type,videoBitsPerSecond:bps});
+       // Reject empty files and retain the type selected by the browser encoder.
+       const done=new Promise((resolve,reject)=>{
+        candidate.ondataavailable=e=>{if(e.data?.size)session.chunks.push(e.data);};
+        candidate.onstop=()=>{
+         const actualType=(candidate.mimeType||format.type).split(';')[0].toLowerCase();
+         resolve(new Blob(session.chunks,{type:actualType}));
+        };
+        candidate.onerror=e=>reject(Error(e.error?.message||'Video recorder failed'));
+       });
+       // Avoid an unhandled rejection if the browser throws immediately.
+       done.catch(()=>{});
+       candidate.start(1000);
+       recorder=candidate;
+       session.recordDone=done;
+       const actualType=(candidate.mimeType||format.type).split(';')[0].toLowerCase();
+       session.videoFormat=actualType==='video/webm'
+        ?{extension:'webm',label:'WEBM',mimeType:actualType}
+        :{extension:'mp4',label:'MP4',mimeType:'video/mp4'};
+       console.info('[ECDYSIS] Video recording:',session.videoFormat.label,output.width+'x'+output.height,bps+'bps');
+       break;
+      }catch(error){console.warn('[ECDYSIS] Recorder candidate not supported:',format.type,bps,error);}
+     }
     }
-    if(!recorder)throw Error('No supported MP4 bitrate');
-    console.info('[ECDYSIS] MP4 target: '+output.width+'x'+output.height+' / '+actualBitrate+'bps');
+    if(!recorder)throw Error('No supported browser video encoder');
     session.recorder=recorder;
-
    }catch(error){
-    console.warn('[ECDYSIS] MP4 unavailable; GIF recording continues:',error);
+    console.warn('[ECDYSIS] Video unavailable; GIF recording continues:',error);
     session.stream?.getTracks().forEach(track=>track.stop());
     session.stream=null;session.recorder=null;session.recordDone=null;
    }
@@ -674,7 +749,7 @@ async function startLog(){
     composeLogFrame(session,current);
     if(elapsed>=session.nextGifTime){
      gifSnapshot(session);
-     session.nextGifTime=elapsed+1000/GIF_FPS;
+     session.nextGifTime=elapsed+1000/session.gifFps;
     }
     session.captureError=null;
    }catch(error){
@@ -688,7 +763,7 @@ async function startLog(){
     }
    }
    updateLogClock(session);
-   if(elapsed>=MAX_LOG_SECONDS*1000){void stopLog();return;}
+   if(elapsed>=session.maxLogSeconds*1000){void stopLog();return;}
    session.raf=requestAnimationFrame(frame);
   }
   session.raf=requestAnimationFrame(frame);
@@ -718,21 +793,21 @@ async function stopLog(){
  if(session.clockTimer){clearInterval(session.clockTimer);session.clockTimer=null;}
  setLogButton('processing');
  const seconds=(performance.now()-session.start)/1000;
- let gif=null,mp4=null;
+ let gif=null,video=null;
  try{
   if(session.recorder&&session.recorder.state!=='inactive'){
    try{session.recorder.stop();}catch(error){console.warn('[ECDYSIS] MP4 stop failed:',error);}
   }
   // Finish GIF independently from MP4. One format failing cannot discard the other.
-  const mp4Promise=session.recordDone?timeoutPromise(session.recordDone,12000):Promise.resolve(null);
+  const videoPromise=session.recordDone?timeoutPromise(session.recordDone,12000):Promise.resolve(null);
   try{
-   gif=await gifFromFrames(session.frames,session.gifOutput.width,session.gifOutput.height,Math.round(100/GIF_FPS));
+   gif=await gifFromFrames(session.frames,session.gifOutput.width,session.gifOutput.height,Math.round(100/session.gifFps));
    if(!gif?.size)throw Error('Empty GIF result');
   }catch(error){console.error('[ECDYSIS] GIF encoding failed:',error);}
-  const maybeMP4=await mp4Promise;
-  if(maybeMP4?.size)mp4=maybeMP4;
-  if(gif||mp4)showLogChoices(gif,mp4,seconds);
-  else toast('LOG FAILED: No usable GIF or MP4. See Console for details.');
+  const maybeVideo=await videoPromise;
+  if(maybeVideo?.size)video=maybeVideo;
+  if(gif||video)showLogChoices(gif,video,seconds,session.videoFormat,session.gifFps);
+  else toast('LOG FAILED: No usable GIF or video. See Console for details.');
  }catch(error){
   console.error('[ECDYSIS] LOG failed:',error);
   toast('LOG FAILED: '+(error.message||error));
@@ -756,8 +831,17 @@ logBtn.addEventListener('click',()=>{
  if(logMode==='recording')void stopLog();
  else void startLog();
 });
-$('#download-gif').addEventListener('click',()=>{if(logReady.gif)outputFile(logReady.gif,'ECDYSIS_LOG_'+Date.now()+'.gif');});
-$('#download-mp4').addEventListener('click',()=>{if(logReady.mp4)outputFile(logReady.mp4,'ECDYSIS_LOG_'+Date.now()+'.mp4');});
+function logFilename(extension){return 'ECDYSIS_LOG_'+Date.now()+'.'+extension;}
+$('#download-gif').addEventListener('click',()=>{if(logReady.gif)outputFile(logReady.gif,logFilename('gif'));});
+$('#download-mp4').addEventListener('click',()=>{
+ if(logReady.video)outputFile(logReady.video,logFilename(logReady.videoFormat?.extension||'webm'));
+});
+$('#android-share-gif')?.addEventListener('click',()=>{
+ if(logReady.gif)void androidShareFile(logReady.gif,logFilename('gif'));
+});
+$('#android-share-video')?.addEventListener('click',()=>{
+ if(logReady.video)void androidShareFile(logReady.video,logFilename(logReady.videoFormat?.extension||'webm'));
+});
 $('#close-log-dialog').addEventListener('click',()=>{logDialog.hidden=true;});
 logDialog.addEventListener('pointerdown',e=>{if(e.target===logDialog)logDialog.hidden=true;});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!logDialog.hidden)logDialog.hidden=true;});

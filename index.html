@@ -6,6 +6,11 @@
   <meta name="theme-color" content="#fffaee" />
   <meta name="description" content="ECDYSIS / Memory shedding, identity and the right to change." />
   <title>ECDYSIS &#x2014; Molt, until perfect.</title>
+  <script>
+    // Only iPhone: make the manifesto image and title flush. Desktop and Android stay unchanged.
+    if (/iPhone|iPod/i.test(navigator.userAgent)) document.documentElement.classList.add('ecd-iphone');
+  </script>
+
   <link rel="preload" href="assets/cocoon7-ink.png" as="image" fetchpriority="high" />
   <link rel="preload" href="assets/gothic_ultra_ot.otf" as="font" type="font/otf" crossorigin />
   <!-- V29: Full CSS is embedded as a reliable fallback. It protects the layout
@@ -2046,8 +2051,39 @@ body > .footer #replay-intro {
   display: none !important;
 }
 
+
+/* V59: iPhone-only manifesto spacing. Do not change desktop / Android layout. */
+@media (max-width: 600px) {
+  html.ecd-iphone #view-ecdysis .manifesto { row-gap: 0 !important; }
+  html.ecd-iphone #view-ecdysis .manifesto-image { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+  html.ecd-iphone #view-ecdysis .manifesto-text {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+  html.ecd-iphone #view-ecdysis .manifesto-text > .micro.subdued:first-child { display: none !important; }
+  html.ecd-iphone #view-ecdysis .manifesto-text h3 { margin-top: 0 !important; }
+}
+/* Android file picker is separate from the site's existing editorial UI. */
+#android-save-dialog[hidden] { display: none !important; }
+#android-save-dialog { position: fixed; inset: 0; z-index: 12000; display: flex;
+  justify-content: center; align-items: center; padding: 24px; background: rgba(8,9,11,.74); }
+#android-save-dialog .android-save-card { max-width: 420px; width: 100%; background: #fffaee;
+  color: #72092a; border: 1px solid #72092a; padding: 25px 22px; box-shadow: 0 16px 48px #0005; }
+#android-save-dialog .android-save-title { font: 22px/1.1 var(--gothic), Georgia, serif; margin: 8px 0 14px; }
+#android-save-dialog .android-save-filename { font: 11px/1.5 var(--mono), monospace; color:#6b5e5a;
+  overflow-wrap:anywhere; margin-bottom: 22px; }
+#android-save-dialog .android-save-actions { display: grid; grid-template-columns:1fr 1fr; gap: 10px; }
+#android-save-dialog button { cursor:pointer; border: 1px solid #72092a; min-height: 46px;
+  background:#fffaee; color:#72092a; font: 12px var(--mono), monospace; }
+#android-save-dialog #android-save-download { background:#72092a; color:#fffaee; }
+#android-save-dialog #android-save-close { margin-top: 12px; width:100%; border-color:transparent; }
+#log-dialog .android-share-controls { display:flex; flex-wrap:wrap; gap: 8px; margin-top:10px; }
+#log-dialog .android-share-controls button { background:transparent; color:#72092a;
+  border:1px solid #72092a; padding:9px 12px; font:11px var(--mono),monospace; }
+#log-dialog .android-share-controls button[hidden] { display:none !important; }
+#log-dialog .android-share-controls[hidden] { display:none !important; }
 </style>
-  <link rel="stylesheet" href="styles.css?v=54" />
+  <link rel="stylesheet" href="styles.css?v=59" />
   <!-- V30: One stable intro source; animation starts only after ink and type are ready. -->
   <style id="ecdysis-intro-stability-v30">
     #intro .intro-image {
@@ -2200,7 +2236,15 @@ body > .footer #replay-intro {
     </section>
   </main>
   <footer class="footer micro"><span>ECDYSIS &#xA9; 2094 &#x2014; MEMORY / RESEARCH / METAMORPHOSIS</span><button id="replay-intro" type="button">REPLAY INTRO &#x2197;</button><span>MOLT, UNTIL PERFECT.</span></footer>
-  <div class="log-dialog" id="log-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="log-dialog-heading"><div class="log-dialog-card"><span class="micro">ECDYSIS / MOTION ARCHIVE</span><h3 id="log-dialog-heading">SAVE YOUR LOG.</h3><p id="log-dialog-details">Motion recording is ready.</p><div class="log-dialog-choices"><button id="download-gif" type="button">GIF &#x2197;<span>ANIMATED IMAGE</span></button><button id="download-mp4" type="button">MP4 &#x2197;<span>VIDEO RECORDING</span></button></div><p class="micro log-dialog-note" id="log-dialog-note"></p><button id="close-log-dialog" class="log-dialog-close" type="button">CLOSE &#x2715;</button></div></div>
+  <div class="log-dialog" id="log-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="log-dialog-heading"><div class="log-dialog-card"><span class="micro">ECDYSIS / MOTION ARCHIVE</span><h3 id="log-dialog-heading">SAVE YOUR LOG.</h3><p id="log-dialog-details">Motion recording is ready.</p><div class="log-dialog-choices"><button id="download-gif" type="button">GIF &#x2197;<span>ANIMATED IMAGE</span></button><button id="download-mp4" type="button">MP4 &#x2197;<span>VIDEO RECORDING</span></button></div><div class="android-share-controls" id="android-share-controls" hidden><button id="android-share-gif" type="button" hidden>SHARE GIF</button><button id="android-share-video" type="button" hidden>SHARE VIDEO</button></div><p class="micro log-dialog-note" id="log-dialog-note"></p><button id="close-log-dialog" class="log-dialog-close" type="button">CLOSE &#x2715;</button></div></div>
+  <div id="android-save-dialog" hidden role="dialog" aria-modal="true" aria-label="Save file">
+    <div class="android-save-card"><span class="micro">ECDYSIS / EXPORT</span>
+      <h3 class="android-save-title">SAVE YOUR IMPRINT.</h3>
+      <p class="android-save-filename" id="android-save-filename"></p>
+      <div class="android-save-actions"><button type="button" id="android-save-download">DOWNLOAD FILE</button><button type="button" id="android-save-share">SHARE / SAVE</button></div>
+      <button type="button" id="android-save-close">CLOSE</button>
+    </div>
+  </div>
   <div id="toast" role="status" aria-live="polite"></div>
   <!-- V26: module-loading guard. Unlike a bare module tag, this gives a usable
        error message and releases the intro overlay if startup fails. -->
@@ -2231,7 +2275,7 @@ body > .footer #replay-intro {
     })();
   </script>
   <script type="module">
-    import('./app.js?v=58').then(function () {
+    import('./app.js?v=59').then(function () {
       document.documentElement.dataset.ecdysisReady = 'true';
     }).catch(function (error) {
       console.error('[ECDYSIS] Application startup failed:', error);
