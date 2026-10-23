@@ -1,5 +1,5 @@
 /* ECDYSIS V27 — independent 2D/3D scales (2D 1.30, 3D 0.75) */
-import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=63';
+import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=64';
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 const IS_ANDROID=/Android/i.test(navigator.userAgent);
 const IS_MOBILE_COLOR=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -311,7 +311,13 @@ async function changeDimension(to){
 }
 $$('[data-dimension]').forEach(b=>b.addEventListener('click',()=>void changeDimension(b.dataset.dimension)));
 
-function setProgress(v){state.progress=Math.min(100,Math.max(0,Math.round(Number(v)||0)));updateUI();render();}
+function setProgress(v,smooth=false){
+ const value=Math.min(100,Math.max(0,Number(v)||0));
+ // Only Android's timed cycle uses fractional progress. Manual controls remain
+ // whole-number steps, and existing stage geometry/appearance is unchanged.
+ state.progress=smooth?Math.round(value*10)/10:Math.round(value);
+ updateUI();render();
+}
 function syncOriginSwatch(_stageIndex){
  // ORIGIN is a fixed six-colour reference key, not a stage-thumbnail.
  // The actual original image and 3D pigment rendering remain unchanged.
@@ -322,7 +328,7 @@ function syncOriginSwatch(_stageIndex){
  swatch.style.backgroundPosition='center';
  swatch.style.backgroundRepeat='no-repeat';
 }
-function updateUI(){const p=state.progress,phase=Math.min(STAGE_COUNT-1,Math.round(p/100*(STAGE_COUNT-1)));$('#progress-range').value=p;if($('#progress-readout'))$('#progress-readout').textContent=p+'%';$('#dial-number').textContent=String(p).padStart(2,'0');$('#dial-arc').style.strokeDashoffset=515.22*(1-p/100);syncOriginSwatch(phase);$('#progress-dial').setAttribute('aria-valuenow',String(p));$('#stage-counter').innerHTML=String(p).padStart(2,'0')+'<span>%</span>';$('#stage-state').textContent=names[phase]+' / '+['ORIGIN','OPENING','SHEDDING'][phase];$$('[data-stage]').forEach((b,i)=>{const selected=phase===i;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});$$('[data-param]').forEach(inp=>{const key=inp.dataset.param;inp.value=state[key];const out=$('#out-'+key);if(out)out.textContent=key==='hue'?String(state.hue):Number(state[key]).toFixed(2);});$$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.mode));$$('[data-palette]').forEach(b=>{const yes=b.dataset.palette===state.palette;b.classList.toggle('active',yes);b.setAttribute('aria-pressed',String(yes));});$('#color-a').value=state.inkA;$('#color-b').value=state.inkB;document.documentElement.style.setProperty('--a',state.inkA);document.documentElement.style.setProperty('--b',state.inkB);const orbit=$('#toggle-rotate');orbit.setAttribute('aria-pressed',String(state.rotate));$('#orbit-pill').textContent=state.rotate?'ON':'OFF';$('#orbit-state').textContent=state.rotate?'ACTIVE / CLICK TO PAUSE':'PAUSED / CLICK TO ORBIT';$('#play-sequence').textContent=playing?'Ⅱ PAUSE CYCLE':'▶ UNFOLD CYCLE';$('#play-sequence').classList.toggle('is-playing',playing);$('#play-sequence').setAttribute('aria-pressed',String(playing));}
+function updateUI(){const p=Math.round(state.progress),phase=Math.min(STAGE_COUNT-1,Math.round(p/100*(STAGE_COUNT-1)));$('#progress-range').value=p;if($('#progress-readout'))$('#progress-readout').textContent=p+'%';$('#dial-number').textContent=String(p).padStart(2,'0');$('#dial-arc').style.strokeDashoffset=515.22*(1-p/100);syncOriginSwatch(phase);$('#progress-dial').setAttribute('aria-valuenow',String(p));$('#stage-counter').innerHTML=String(p).padStart(2,'0')+'<span>%</span>';$('#stage-state').textContent=names[phase]+' / '+['ORIGIN','OPENING','SHEDDING'][phase];$$('[data-stage]').forEach((b,i)=>{const selected=phase===i;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});$$('[data-param]').forEach(inp=>{const key=inp.dataset.param;inp.value=state[key];const out=$('#out-'+key);if(out)out.textContent=key==='hue'?String(state.hue):Number(state[key]).toFixed(2);});$$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.mode));$$('[data-palette]').forEach(b=>{const yes=b.dataset.palette===state.palette;b.classList.toggle('active',yes);b.setAttribute('aria-pressed',String(yes));});$('#color-a').value=state.inkA;$('#color-b').value=state.inkB;document.documentElement.style.setProperty('--a',state.inkA);document.documentElement.style.setProperty('--b',state.inkB);const orbit=$('#toggle-rotate');orbit.setAttribute('aria-pressed',String(state.rotate));$('#orbit-pill').textContent=state.rotate?'ON':'OFF';$('#orbit-state').textContent=state.rotate?'ACTIVE / CLICK TO PAUSE':'PAUSED / CLICK TO ORBIT';$('#play-sequence').textContent=playing?'Ⅱ PAUSE CYCLE':'▶ UNFOLD CYCLE';$('#play-sequence').classList.toggle('is-playing',playing);$('#play-sequence').setAttribute('aria-pressed',String(playing));}
 const dial=$('#progress-dial');function pointDial(e){const r=dial.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;setProgress(Math.round(((Math.atan2(x,-y)+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*100));}
 dial.addEventListener('pointerdown',e=>{e.preventDefault();dial.setPointerCapture(e.pointerId);pointDial(e);});dial.addEventListener('pointermove',e=>{if(dial.hasPointerCapture(e.pointerId))pointDial(e);});dial.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;e.preventDefault();const dir=['ArrowLeft','ArrowDown'].includes(e.key)?-1:1;setProgress(e.key==='Home'?0:e.key==='End'?100:state.progress+dir*(e.shiftKey?10:1));});$('#progress-range').addEventListener('input',e=>setProgress(e.target.value));$$('[data-stage]').forEach((b,i)=>b.addEventListener('click',()=>setProgress(stageProgress(i))));
 /* Render just ONE visible canvas, with one animation frame for slider bursts. */
@@ -350,7 +356,7 @@ $('#play-sequence').addEventListener('click',()=>{
  toggleCycle();
 });
 // 3D orbit is frame-rate independent; cap GPU work near 30fps instead of 60.
-let lastOrbitTime=0,lastOrbitPaint=0;
+let lastOrbitTime=0,lastOrbitPaint=0,lastCyclePaint=0;
 function animate(){
  if(frameId)return;
  function tick(now){
@@ -358,8 +364,14 @@ function animate(){
   if(document.hidden){lastOrbitTime=0;return;}
   if(playing){
    const t=Math.min(1,(now-playStart)/16000);
-   const next=Math.round(t*100);
-   if(next!==state.progress)setProgress(next);
+   // V63 rounded the entire 16-second cycle to just 101 discrete images
+   // (around 6 changes per second). During Android playback, preserve 0.1%
+   // progress increments but throttle actual UI/GPU work to ~20 fps.
+   if(!IS_ANDROID || t===1 || now-lastCyclePaint>=45){
+    lastCyclePaint=now;
+    const next=IS_ANDROID?Math.round(t*1000)/10:Math.round(t*100);
+    if(next!==state.progress)setProgress(next,IS_ANDROID);
+   }
    if(t===1){playing=false;updateUI();}
   }
   if(state.rotate && (dimension==='3d'?Boolean(threeD):Boolean(twoD))){
@@ -367,7 +379,7 @@ function animate(){
    if(dimension==='3d')threeD.yaw+=(dt*.00024);
    else twoD.angle=(twoD.angle||0)+dt*.00021;
    lastOrbitTime=now;
-   if(now-lastOrbitPaint>=(IS_ANDROID?85:32)){
+   if(now-lastOrbitPaint>=(IS_ANDROID?(logSession?45:85):32)){
     lastOrbitPaint=now;
     if(dimension==='3d'){if(typeof threeD.requestDraw==='function')threeD.requestDraw();else threeD.draw();}
     else twoD.draw();
@@ -434,8 +446,11 @@ $$('[data-export]').forEach(b=>b.addEventListener('click',()=>{toggleMenu(false)
 const LOG_FPS=30, GIF_FPS=8, GIF_WIDTH=960, MAX_LOG_SECONDS=60;
 // Android uses bounded capture buffers rather than running a second large
 // pixel-processing loop while its 3D GPU is busy.
-const ANDROID_GIF_FPS=3, ANDROID_GIF_WIDTH=360, ANDROID_MAX_LOG_SECONDS=12;
-const ANDROID_VIDEO_FPS=12;
+// V64: Android LOG restores the original 60-second safety limit (the user
+// may stop sooner by tapping LOG a second time). Raise capture cadence for
+// motion while keeping the V61 bounded output resolution and frame buffers.
+const ANDROID_GIF_FPS=6, ANDROID_GIF_WIDTH=360, ANDROID_MAX_LOG_SECONDS=60;
+const ANDROID_VIDEO_FPS=20;
 
 /* V37: GIF quality 960px with spatial ordered dithering, stable palette.
    GIF has only 256 colours. The old RGB332 palette encoded beige
@@ -761,6 +776,9 @@ async function startLog(){
   if(!ctx||!gifCtx)throw Error('Canvas capture is not supported');
   session={output,ctx,gifOutput,gifCtx,gifFps,maxLogSeconds,videoFormat:null,frames:[],start:performance.now(),nextGifTime:0,lastPaintTime:-Infinity,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};
   logSession=session;
+  // Android's ordinary low-power 3D draw cap is ~13fps. Lift it only while
+  // recording so the video encoder receives newly rendered frames.
+  if(IS_ANDROID&&dimension==='3d')threeD?.setRecordingCapture?.(true);
   logReady={gif:null,video:null,videoFormat:null};
   logDialog.hidden=true;
   composeLogFrame(session,source);
@@ -821,15 +839,19 @@ async function startLog(){
    const elapsed=Math.max(0,performance.now()-session.start);
    const current=dimension==='3d'?canvas3D:canvas2D;
    try{
-    // V61: Android composites 12 frames/second, not every 60Hz browser tick.
-    // The GIF snapshot runs only at 3fps on those already-composited frames.
+    // V64: Android composites up to 20 frames/second while recording.
+    // GIF samples up to 6fps from the same colour-correct opaque output.
     if(!IS_ANDROID || elapsed-session.lastPaintTime>=1000/ANDROID_VIDEO_FPS){
      composeLogFrame(session,current);
      session.lastPaintTime=elapsed;
     }
     if(elapsed>=session.nextGifTime){
      gifSnapshot(session);
-     session.nextGifTime=elapsed+1000/session.gifFps;
+     // Keep a steady wall-clock cadence when a frame runs a little late.
+     // Skip a genuine backlog rather than creating a burst of repeated frames.
+     const step=1000/session.gifFps;
+     session.nextGifTime+=step;
+     if(session.nextGifTime<elapsed-step)session.nextGifTime=elapsed+step;
     }
     session.captureError=null;
    }catch(error){
@@ -851,6 +873,7 @@ async function startLog(){
   console.error('[ECDYSIS] LOG could not start:',error);
   if(session?.clockTimer)clearInterval(session.clockTimer);
   session?.stream?.getTracks().forEach(track=>track.stop());
+  if(IS_ANDROID)threeD?.setRecordingCapture?.(false);
   logSession=null;setLogButton('idle');
   toast('LOG START FAILED: '+(error.message||error));
  }
@@ -869,6 +892,7 @@ async function stopLog(){
  const session=logSession;
  if(!session||session.stopped)return;
  session.stopped=true;
+ if(IS_ANDROID)threeD?.setRecordingCapture?.(false);
  cancelAnimationFrame(session.raf);
  if(session.clockTimer){clearInterval(session.clockTimer);session.clockTimer=null;}
  setLogButton('processing');
@@ -879,7 +903,7 @@ async function stopLog(){
    try{session.recorder.stop();}catch(error){console.warn('[ECDYSIS] MP4 stop failed:',error);}
   }
   // Finish GIF independently from MP4. One format failing cannot discard the other.
-  const videoPromise=session.recordDone?timeoutPromise(session.recordDone,12000):Promise.resolve(null);
+  const videoPromise=session.recordDone?timeoutPromise(session.recordDone,20000):Promise.resolve(null);
   try{
    gif=await gifFromFrames(session.frames,session.gifOutput.width,session.gifOutput.height,Math.round(100/session.gifFps));
    if(!gif?.size)throw Error('Empty GIF result');

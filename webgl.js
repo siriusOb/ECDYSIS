@@ -718,7 +718,9 @@ export class Specimen3D{
   const paint=t=>{
    // Cap Android interactive GPU/CPU draws near 18fps without adding delays
    // to PNG exports (exportCanvas continues to draw immediately).
-   if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<75){
+   // Preserve low-power 13fps when idle; target ~22fps only during LOG.
+   const minGap=this.recordingCapture?45:75;
+   if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<minGap){
     this.drawPending=requestAnimationFrame(paint);return;
    }
    this.drawPending=0;
@@ -726,6 +728,10 @@ export class Specimen3D{
    this.draw();
   };
   this.drawPending=requestAnimationFrame(paint);
+ }
+ setRecordingCapture(value){
+  this.recordingCapture=Boolean(value);
+  this.requestDraw();
  }
  setInteractiveMode(value){
   const next=Boolean(value);
@@ -840,7 +846,8 @@ export class SpecimenSoftware3D {
   requestDraw(){
     if(this.drawPending)return;
     const paint=t=>{
-      if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<65){
+      const minGap=this.recordingCapture?55:65;
+      if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<minGap){
         this.drawPending=requestAnimationFrame(paint);return;
       }
       this.drawPending=0;
@@ -849,6 +856,7 @@ export class SpecimenSoftware3D {
     };
     this.drawPending=requestAnimationFrame(paint);
   }
+  setRecordingCapture(value){this.recordingCapture=Boolean(value);this.requestDraw();}
   setInteractiveMode(value){this.autoFast=Boolean(value);this.requestDraw();}
 
   setImage(i,img) {
