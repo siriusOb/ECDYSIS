@@ -687,7 +687,7 @@ function stableStageWeights(progress,counts){
 }
 
 export class Specimen3D{
- constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:!ANDROID_DEVICE,preserveDrawingBuffer:true,premultipliedAlpha:MOBILE_COLOR_FIX});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;if(MOBILE_COLOR_FIX && 'drawingBufferColorSpace' in gl)gl.drawingBufferColorSpace='srgb';this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','verticalRatio','stageOffsetY','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=0;this.pitch=0;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
+ constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:!ANDROID_DEVICE,preserveDrawingBuffer:true,premultipliedAlpha:MOBILE_COLOR_FIX});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;if(MOBILE_COLOR_FIX && 'drawingBufferColorSpace' in gl)gl.drawingBufferColorSpace='srgb';this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','verticalRatio','stageOffsetY','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=0;this.pitch=0;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.renderVersion=0;this.textureCache=new WeakMap();
   canvas.addEventListener('pointerdown',e=>{
    this.drag={x:e.clientX,y:e.clientY,yaw:this.yaw,pitch:this.pitch};
    canvas.setPointerCapture(e.pointerId);
@@ -719,7 +719,7 @@ export class Specimen3D{
    // Cap Android interactive GPU/CPU draws near 18fps without adding delays
    // to PNG exports (exportCanvas continues to draw immediately).
    // Preserve low-power 13fps when idle; target ~22fps only during LOG.
-   const minGap=this.recordingCapture?45:75;
+   const minGap=this.recordingCapture?(ANDROID_DEVICE && (navigator.hardwareConcurrency||4)>=6?42:50):75;
    if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<minGap){
     this.drawPending=requestAnimationFrame(paint);return;
    }
@@ -783,7 +783,7 @@ export class Specimen3D{
    gl.activeTexture(gl.TEXTURE0);
    gl.bindTexture(gl.TEXTURE_2D,tex);
    gl.bindVertexArray(mesh.vao);
-   set('scale',baseScale*(i<2?1.105:1)); // Keep V57 COCOON/HATCH size (85% of V56).
+   set('scale',baseScale*(i<2?(ANDROID_DEVICE?1.0:1.105):1)); // Android MAGNITUDE 0.75 means true 0.75; other platforms retain V57.
    set('verticalRatio',i===2?0.92:1.0); // Keep V56 MOLT flattening.
    set('stageOffsetY',i===1?0.024:0.0); // V58: HATCH up 1.2% of viewport height.
    set('alpha',opacity);
@@ -793,6 +793,7 @@ export class Specimen3D{
    gl.drawElements(p.mode==='wire'?gl.LINES:gl.TRIANGLES,p.mode==='wire'?mesh.wire:mesh.tri,gl.UNSIGNED_INT,0);
   }
   gl.bindVertexArray(null);
+  this.renderVersion++; // V65: signal genuinely new WebGL frames to LOG compositor.
  }
  exportCanvas(){this.draw();return this.canvas;}
 }
@@ -961,7 +962,7 @@ export class SpecimenSoftware3D {
     const cp=Math.cos(viewPitch),sp=Math.sin(viewPitch);
 
     const renderStage = (i,opacity) => {
-      const unit=baseUnit*(i<2?1.105:1); // V57: COCOON/HATCH at 85% of V56
+      const unit=baseUnit*(i<2?(ANDROID_DEVICE?1.0:1.105):1); // Android: honor MAGNITUDE 0.75 in fallback too
       const samples = this.meshes[i]; // Do not show COCOON while another OBJ loads.
       const atlas = this.atlasForStage(i);
       if (!samples || !atlas || opacity < .005) return false;

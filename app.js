@@ -1,5 +1,5 @@
 /* ECDYSIS V27 — independent 2D/3D scales (2D 1.30, 3D 0.75) */
-import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=64';
+import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=65';
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 const IS_ANDROID=/Android/i.test(navigator.userAgent);
 const IS_MOBILE_COLOR=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -7,7 +7,7 @@ const names=['COCOON','HATCH','MOLT'];
 const STAGE_COUNT=names.length;
 const stageProgress=index=>Math.round(100*index/(STAGE_COUNT-1));
 const DEFAULT={progress:0,modification:0,scale:1.3,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.6,hue:0,mode:'surface',rotate:false,monoWhite:0};
-const dimensionScales={ '2d':1.3, '3d':0.75 };
+const dimensionScales={ '2d':1.3, '3d':0.75 }; // Android MAGNITUDE starts at 0.75; remains user-adjustable.
 let state={...DEFAULT},dimension='2d',twoD=null,threeD=null,playing=false,playStart=0,frameId=0,introTimer=0,introFade=0,toastTimer=0,modelsLoading=null;
 const pics=Array(STAGE_COUNT).fill(null);
 let texture3D = null; // Original cocoon7.png is reserved for 3D surface artwork.
@@ -449,8 +449,12 @@ const LOG_FPS=30, GIF_FPS=8, GIF_WIDTH=960, MAX_LOG_SECONDS=60;
 // V64: Android LOG restores the original 60-second safety limit (the user
 // may stop sooner by tapping LOG a second time). Raise capture cadence for
 // motion while keeping the V61 bounded output resolution and frame buffers.
-const ANDROID_GIF_FPS=6, ANDROID_GIF_WIDTH=360, ANDROID_MAX_LOG_SECONDS=60;
-const ANDROID_VIDEO_FPS=20;
+// V65: Keep good colour/detail without driving the OBJ shader at video-canvas resolution.
+// Video/GIF buffers are 2D composites; their size does NOT alter WebGL surface pixels.
+// Lower-tier Android keeps the 720px tier while capable devices get 960px video.
+const ANDROID_CAPABLE=(navigator.hardwareConcurrency||4)>=6 && (navigator.deviceMemory===undefined||navigator.deviceMemory>=4);
+const ANDROID_GIF_FPS=8, ANDROID_GIF_WIDTH=ANDROID_CAPABLE?500:440, ANDROID_MAX_LOG_SECONDS=60;
+const ANDROID_VIDEO_FPS=ANDROID_CAPABLE?24:20, ANDROID_VIDEO_WIDTH=ANDROID_CAPABLE?960:720;
 
 /* V37: GIF quality 960px with spatial ordered dithering, stable palette.
    GIF has only 256 colours. The old RGB332 palette encoded beige
@@ -607,30 +611,89 @@ $('#android-save-share')?.addEventListener('click',()=>{
 });
 $('#android-save-close')?.addEventListener('click',()=>{androidSaveDialog.hidden=true;pendingAndroidFile=null;});
 
-/* Each frame is a compact RGB332 palette index, not a large RGBA image. */
+/* V65: GIF colour quantization is CPU-heavy. On Android, move pixel
+ * classification + palette lookup off the UI thread, keeping the original
+ * 256-colour palette, stable dithering and full 60-second recording length.
+ * A bounded queue avoids stalled workers consuming unbounded mobile RAM. */
+function quantizeGifPixels(rgba,width){
+ const indexed=new Uint8Array(rgba.length/4);
+ const lut=getGifColorLookup();
+ const bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+ for(let p=0,k=0;p<indexed.length;p++,k+=4){
+  const r=rgba[k],g=rgba[k+1],b=rgba[k+2];
+  if(r===232&&g===222&&b===196){indexed[p]=216;continue;}
+  if(r===8&&g===9&&b===11){indexed[p]=217;continue;}
+  const x=p%width,y=(p/width)|0;
+  const delta=(bayer[((y&3)<<2)|(x&3)]-7.5)*1.6;
+  const rr=Math.max(0,Math.min(255,Math.round(r+delta)));
+  const gg=Math.max(0,Math.min(255,Math.round(g+delta*.85)));
+  const bb=Math.max(0,Math.min(255,Math.round(b+delta*.95)));
+  indexed[p]=lut[((rr>>3)<<10)|((gg>>3)<<5)|(bb>>3)];
+ }
+ return indexed;
+}
+function installAndroidGifQuantizer(session){
+ if(!IS_ANDROID||typeof Worker==='undefined')return;
+ let url=null;
+ try{
+  const source=`const gifPaletteColors=${gifPaletteColors.toString()};
+let gifColorLookup=null;
+${getGifColorLookup.toString()}
+${quantizeGifPixels.toString()}
+self.onmessage=e=>{try{const {id,rgba,width}=e.data;const indexed=quantizeGifPixels(new Uint8ClampedArray(rgba),width);self.postMessage({id,buffer:indexed.buffer},[indexed.buffer]);}catch(error){self.postMessage({id,error:String(error?.message||error)});}};`;
+  url=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
+  const worker=new Worker(url);
+  URL.revokeObjectURL(url);
+  session.gifWorker=worker;
+  worker.onmessage=e=>{
+   session.gifOutstanding=Math.max(0,session.gifOutstanding-1);
+   const {id,buffer,error}=e.data||{};
+   if(buffer && id>=0 && id<session.frames.length)session.frames[id]=new Uint8Array(buffer);
+   else if(error)console.warn('[ECDYSIS] Android GIF frame fallback:',error);
+  };
+  worker.onerror=e=>{
+   console.warn('[ECDYSIS] GIF quantizer unavailable; local fallback:',e.message);
+   worker.terminate();if(session.gifWorker===worker)session.gifWorker=null;
+   session.gifOutstanding=0;
+  };
+ }catch(error){if(url)URL.revokeObjectURL(url);console.warn('[ECDYSIS] GIF quantizer worker unavailable:',error);}
+}
 function gifSnapshot(session){
  const {gifOutput,gifCtx,output}=session;
  gifCtx.drawImage(output,0,0,gifOutput.width,gifOutput.height);
  const rgba=gifCtx.getImageData(0,0,gifOutput.width,gifOutput.height).data;
- const indexed=new Uint8Array(gifOutput.width*gifOutput.height);
- const lut=getGifColorLookup();
-  // Stable ordered dithering reduces banding in fine fibres and soft gradients.
-  // The matrix is fixed on the image, so it does not sparkle between frames.
-  const bayer=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
-  const width=gifOutput.width;
-  for(let p=0,k=0;p<indexed.length;p++,k+=4){
-   const r=rgba[k],g=rgba[k+1],b=rgba[k+2];
-   // Explicit RGB preservation for both official stage backgrounds.
-   if(r===232&&g===222&&b===196){indexed[p]=216;continue;}
-   if(r===8&&g===9&&b===11){indexed[p]=217;continue;}
-   const x=p%width,y=(p/width)|0;
-   const delta=(bayer[((y&3)<<2)|(x&3)]-7.5)*1.6;
-   const rr=Math.max(0,Math.min(255,Math.round(r+delta)));
-   const gg=Math.max(0,Math.min(255,Math.round(g+delta*.85)));
-   const bb=Math.max(0,Math.min(255,Math.round(b+delta*.95)));
-   indexed[p]=lut[((rr>>3)<<10)|((gg>>3)<<5)|(bb>>3)];
+ if(session.gifWorker){
+  // Never allow a backlog of jobs to make the next touch unresponsive.
+  if(session.gifOutstanding>=3){
+   const previous=session.frames.length?session.frames[session.frames.length-1]:null;
+   session.frames.push(previous||null); // keep approximate GIF wall-clock duration
+   return;
   }
- session.frames.push(indexed);
+  const id=session.frames.length;
+  session.frames.push(null);
+  session.gifOutstanding++;
+  try{
+   session.gifWorker.postMessage({id,width:gifOutput.width,rgba:rgba.buffer},[rgba.buffer]);
+   return;
+  }catch(error){
+   session.frames.pop();session.gifOutstanding--;
+   console.warn('[ECDYSIS] GIF worker post failed, falling back:',error);
+   session.gifWorker.terminate();session.gifWorker=null;
+  }
+ }
+ session.frames.push(quantizeGifPixels(rgba,gifOutput.width));
+}
+function awaitGifWorkerDrain(session){
+ if(!session.gifWorker)return Promise.resolve();
+ return new Promise(resolve=>{
+  const started=performance.now();
+  const poll=()=>{
+   if(session.gifOutstanding===0 || performance.now()-started>4500){
+    session.gifWorker?.terminate();session.gifWorker=null;resolve();
+   }else setTimeout(poll,50);
+  };
+  poll();
+ });
 }
 /* GIF89a with a global 256-color RGB332 table.
    Critical LZW detail: the CLEAR code must be emitted in the *previous*
@@ -639,8 +702,9 @@ function gifSnapshot(session){
 function encodeGifFrames(frames,width,height,delay){
  if(!frames?.length)throw Error('No frames recorded');
  if(!Number.isInteger(width)||!Number.isInteger(height)||width<=0||height<=0||width>65535||height>65535)throw Error('Invalid GIF size');
- const chunks=[];
- const byte=v=>chunks.push(v&255);
+ // Typed 64KiB chunks keep long-GIF memory bounded.
+ const chunks=[];let block=new Uint8Array(65536),used=0;
+ const byte=v=>{if(used===block.length){chunks.push(block);block=new Uint8Array(65536);used=0;}block[used++]=v&255;};
  const word=v=>{byte(v);byte(v>>8);};
  for(const c of 'GIF89a')byte(c.charCodeAt(0));
  word(width);word(height);byte(0xf7);byte(0);byte(0);
@@ -648,13 +712,13 @@ function encodeGifFrames(frames,width,height,delay){
   byte(color[0]);byte(color[1]);byte(color[2]);
  }
  // Infinite animation loop.
- chunks.push(0x21,0xff,0x0b);
+ for(const x of [0x21,0xff,0x0b])byte(x);
  for(const c of 'NETSCAPE2.0')byte(c.charCodeAt(0));
- chunks.push(3,1,0,0,0);
+ for(const x of [3,1,0,0,0])byte(x);
  const centiseconds=Math.max(2,Math.round(Number(delay)||13));
  for(const pixels of frames){
   if(pixels.length!==width*height)throw Error('GIF frame size mismatch');
-  chunks.push(0x21,0xf9,4,0,centiseconds&255,(centiseconds>>8)&255,0,0);
+  for(const x of [0x21,0xf9,4,0,centiseconds&255,(centiseconds>>8)&255,0,0])byte(x);
   byte(0x2c);word(0);word(0);word(width);word(height);byte(0);
   byte(8);
   let prefix=-1,dict=new Map(),next=258,bits=9,acc=0,count=0;
@@ -691,8 +755,8 @@ function encodeGifFrames(frames,width,height,delay){
   }
   byte(0);
  }
- byte(0x3b);
- return new Blob([Uint8Array.from(chunks)],{type:'image/gif'});
+ byte(0x3b);if(used)chunks.push(block.slice(0,used));
+ return new Blob(chunks,{type:'image/gif'});
 }
 /* Self-contained worker: works even if gif-worker.js was never uploaded.
    If Safari or CSP prevents Blob workers, encode on the main thread. */
@@ -762,7 +826,7 @@ async function startLog(){
  try{
   const source=active().exportCanvas();
   if(!source?.width||!source?.height)throw Error('Image canvas is not ready');
-  const width=IS_ANDROID?640:1440; // Preserve desktop/iOS 1440px; Android reduces encoder load.
+  const width=IS_ANDROID?ANDROID_VIDEO_WIDTH:1440; // Android: balanced quality tier; Apple/desktop unchanged.
   const height=Math.max(2,2*Math.round(width*source.height/source.width/2));
   const output=document.createElement('canvas');output.width=width;output.height=height;
   const ctx=export2DContext(output,{alpha:false});
@@ -774,8 +838,9 @@ async function startLog(){
   const gifCtx=export2DContext(gifOutput,{willReadFrequently:true});
   if(gifCtx){gifCtx.imageSmoothingEnabled=true;gifCtx.imageSmoothingQuality='high';}
   if(!ctx||!gifCtx)throw Error('Canvas capture is not supported');
-  session={output,ctx,gifOutput,gifCtx,gifFps,maxLogSeconds,videoFormat:null,frames:[],start:performance.now(),nextGifTime:0,lastPaintTime:-Infinity,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};
+  session={output,ctx,gifOutput,gifCtx,gifFps,maxLogSeconds,videoFormat:null,frames:[],start:performance.now(),nextGifTime:0,lastPaintTime:-Infinity,lastRenderVersion:-1,gifWorker:null,gifOutstanding:0,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};
   logSession=session;
+  if(IS_ANDROID)installAndroidGifQuantizer(session);
   // Android's ordinary low-power 3D draw cap is ~13fps. Lift it only while
   // recording so the video encoder receives newly rendered frames.
   if(IS_ANDROID&&dimension==='3d')threeD?.setRecordingCapture?.(true);
@@ -793,7 +858,7 @@ async function startLog(){
    try{
     session.stream=output.captureStream(IS_ANDROID?ANDROID_VIDEO_FPS:LOG_FPS);
     let recorder=null;
-    const rates=IS_ANDROID?[1800000,1100000,700000]:[12000000,8500000,6000000];
+    const rates=IS_ANDROID?(ANDROID_CAPABLE?[4800000,3600000,2600000]:[3200000,2400000,1800000]):[12000000,8500000,6000000];
     for(const format of formats){
      if(recorder)break;
      for(const bps of rates){
@@ -841,9 +906,14 @@ async function startLog(){
    try{
     // V64: Android composites up to 20 frames/second while recording.
     // GIF samples up to 6fps from the same colour-correct opaque output.
-    if(!IS_ANDROID || elapsed-session.lastPaintTime>=1000/ANDROID_VIDEO_FPS){
+    // V65: The Android GL renderer is already budgeted. Do not reread and
+    // blend the same GPU frame into the 2D recording surface repeatedly.
+    const fresh3D=dimension!=='3d' || typeof threeD?.renderVersion!=='number'
+      || threeD.renderVersion!==session.lastRenderVersion;
+    if((!IS_ANDROID || elapsed-session.lastPaintTime>=1000/ANDROID_VIDEO_FPS) && fresh3D){
      composeLogFrame(session,current);
      session.lastPaintTime=elapsed;
+     if(dimension==='3d' && threeD)session.lastRenderVersion=threeD.renderVersion;
     }
     if(elapsed>=session.nextGifTime){
      gifSnapshot(session);
@@ -872,6 +942,7 @@ async function startLog(){
  }catch(error){
   console.error('[ECDYSIS] LOG could not start:',error);
   if(session?.clockTimer)clearInterval(session.clockTimer);
+  session?.gifWorker?.terminate();
   session?.stream?.getTracks().forEach(track=>track.stop());
   if(IS_ANDROID)threeD?.setRecordingCapture?.(false);
   logSession=null;setLogButton('idle');
@@ -905,6 +976,14 @@ async function stopLog(){
   // Finish GIF independently from MP4. One format failing cannot discard the other.
   const videoPromise=session.recordDone?timeoutPromise(session.recordDone,20000):Promise.resolve(null);
   try{
+   await awaitGifWorkerDrain(session);
+   // If the worker failed after taking a frame, retain the most recently
+   // completed frame instead of discarding the whole session.
+   let prev=session.frames.find(f=>f instanceof Uint8Array)||new Uint8Array(session.gifOutput.width*session.gifOutput.height);
+   for(let i=0;i<session.frames.length;i++){
+    if(!(session.frames[i] instanceof Uint8Array))session.frames[i]=prev;
+    else prev=session.frames[i];
+   }
    gif=await gifFromFrames(session.frames,session.gifOutput.width,session.gifOutput.height,Math.round(100/session.gifFps));
    if(!gif?.size)throw Error('Empty GIF result');
   }catch(error){console.error('[ECDYSIS] GIF encoding failed:',error);}
@@ -917,6 +996,7 @@ async function stopLog(){
   toast('LOG FAILED: '+(error.message||error));
  }finally{
   session.stream?.getTracks().forEach(track=>track.stop());
+  session.gifWorker?.terminate();session.gifWorker=null;
   session.frames=[];logSession=null;setLogButton('idle');
  }
 }

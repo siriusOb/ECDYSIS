@@ -2101,8 +2101,26 @@ body > .footer #replay-intro {
   border:1px solid #72092a; padding:9px 12px; font:11px var(--mono),monospace; }
 #log-dialog .android-share-controls button[hidden] { display:none !important; }
 #log-dialog .android-share-controls[hidden] { display:none !important; }
+
+/* ECDYSIS V65: intro type, mobile ink enlargement and iPhone text asterisk. */
+#intro .intro-fit h1 { scale: .75 !important; } /* Independent of fitIntro() + animated transform. */
+@media (max-width: 600px) {
+  html.ecd-iphone #view-ecdysis .manifesto-image img,
+  html.ecd-android #view-ecdysis .manifesto-image img {
+    transform: rotate(12deg) scale(1.30) !important;
+    transform-origin: center center;
+  }
+}
+/* Render an ordinary U+002A glyph, never the system emoji presentation. */
+html.ecd-iphone .site-header .wordmark span { font-size: 0 !important; vertical-align: baseline !important; }
+html.ecd-iphone .site-header .wordmark span::after {
+  content: "*";
+  font: 18px/1 Arial, Helvetica, sans-serif;
+  color: #599782;
+  vertical-align: super;
+}
 </style>
-  <link rel="stylesheet" href="styles.css?v=64" />
+  <link rel="stylesheet" href="styles.css?v=65" />
   <!-- V30: One stable intro source; animation starts only after ink and type are ready. -->
   <style id="ecdysis-intro-stability-v30">
     #intro .intro-image {
@@ -2294,7 +2312,7 @@ body > .footer #replay-intro {
     })();
   </script>
   <script type="module">
-    import('./app.js?v=64').then(function () {
+    import('./app.js?v=65').then(function () {
       document.documentElement.dataset.ecdysisReady = 'true';
     }).catch(function (error) {
       console.error('[ECDYSIS] Application startup failed:', error);

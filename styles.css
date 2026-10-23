@@ -2082,3 +2082,21 @@
   #log-dialog .android-share-controls button[hidden] { display:none !important; }
   #log-dialog .android-share-controls[hidden] { display:none !important; }
   
+  /* ECDYSIS V65: intro type, mobile ink enlargement and iPhone text asterisk. */
+  #intro .intro-fit h1 { scale: .75 !important; } /* Independent of fitIntro() + animated transform. */
+  @media (max-width: 600px) {
+    html.ecd-iphone #view-ecdysis .manifesto-image img,
+    html.ecd-android #view-ecdysis .manifesto-image img {
+      transform: rotate(12deg) scale(1.30) !important;
+      transform-origin: center center;
+    }
+  }
+  /* Render an ordinary U+002A glyph, never the system emoji presentation. */
+  html.ecd-iphone .site-header .wordmark span { font-size: 0 !important; vertical-align: baseline !important; }
+  html.ecd-iphone .site-header .wordmark span::after {
+    content: "*";
+    font: 18px/1 Arial, Helvetica, sans-serif;
+    color: #599782;
+    vertical-align: super;
+  }
+  
