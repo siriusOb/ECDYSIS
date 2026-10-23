@@ -1,7 +1,8 @@
 /* ECDYSIS V27 — independent 2D/3D scales (2D 1.30, 3D 0.75) */
-import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=61';
+import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=63';
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 const IS_ANDROID=/Android/i.test(navigator.userAgent);
+const IS_MOBILE_COLOR=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const names=['COCOON','HATCH','MOLT'];
 const STAGE_COUNT=names.length;
 const stageProgress=index=>Math.round(100*index/(STAGE_COUNT-1));
@@ -381,7 +382,48 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&(playing|
 /* Export settings retained from V7. */
 const wrap=$('#export-wrap'),exportBtn=$('#export-png');function toggleMenu(open){wrap.classList.toggle('open',open);exportBtn.setAttribute('aria-expanded',String(open));}
 exportBtn.addEventListener('click',()=>toggleMenu(!wrap.classList.contains('open')));document.addEventListener('pointerdown',e=>{if(!wrap.contains(e.target))toggleMenu(false);});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleMenu(false);});
-async function exportPNG(kind){try{const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}const src=renderer.exportCanvas(),out=document.createElement('canvas');out.width=IS_ANDROID?Math.min(960,Math.max(640,src.width)):Math.min(2400,Math.max(1400,src.width));out.height=Math.round(out.width*src.height/src.width);const ctx=out.getContext('2d');if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';ctx.fillRect(0,0,out.width,out.height);}ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';drawExportSpecimen(ctx,src,0,0,out.width,out.height);if(kind==='background'){ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';ctx.font=`${Math.round(out.width*.018)}px monospace`;ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);ctx.textAlign='right';ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);}const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`;if(IS_ANDROID){showAndroidSave(blob,filename);return;}const file=new File([blob],filename,{type:'image/png'});if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}outputFile(blob,filename);toast('PNG EXPORTED');}catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}}
+async function exportPNG(kind){
+ try{
+  const renderer=active();if(!renderer){toast('OPEN MOLT FIRST');return;}
+  const src=renderer.exportCanvas();
+  if(!src?.width||!src?.height)throw Error('Render canvas is not ready');
+  const out=document.createElement('canvas');
+  out.width=IS_ANDROID?Math.min(960,Math.max(640,src.width)):Math.min(2400,Math.max(1400,src.width));
+  out.height=Math.round(out.width*src.height/src.width);
+  const ctx=export2DContext(out,{alpha:kind!=='background'});
+  if(!ctx)throw Error('PNG canvas is unavailable');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.globalAlpha=1;
+  if(kind==='background'){
+   ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';
+   ctx.fillRect(0,0,out.width,out.height);
+  }
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
+  if(kind==='background'&&IS_MOBILE_COLOR){
+   drawMobileOpaqueSpecimen(ctx,src,0,0,out.width,out.height);
+  }else{
+   // Transparent PNG must remain genuinely transparent, not matte-filled.
+   drawExportSpecimen(ctx,src,0,0,out.width,out.height);
+  }
+  if(kind==='background'){
+   ctx.fillStyle=canvasBackground==='black'?'#c7f9e4':'#72092a';
+   ctx.font=`${Math.round(out.width*.018)}px monospace`;
+   ctx.fillText('ECDYSIS / '+dimension.toUpperCase(),out.width*.04,out.height*.92);
+   ctx.textAlign='right';
+   ctx.fillText(state.progress+'%',out.width*.96,out.height*.92);
+  }
+  const blob=await new Promise((resolve,reject)=>out.toBlob(x=>x?resolve(x):reject(Error('PNG encoder failed')),'image/png'));
+  const filename=`ECDYSIS_${dimension.toUpperCase()}_${state.progress}P_${kind.toUpperCase()}.png`;
+  if(IS_ANDROID){showAndroidSave(blob,filename);return;}
+  const file=new File([blob],filename,{type:'image/png'});
+  if(/iPhone|iPad|iPod/.test(navigator.userAgent)&&navigator.share&&navigator.canShare?.({files:[file]})){
+   try{await navigator.share({files:[file]});return;}
+   catch(e){if(e.name==='AbortError')return;}
+  }
+  outputFile(blob,filename);toast('PNG EXPORTED');
+ }catch(error){console.error(error);toast('EXPORT FAILED: '+error.message);}
+}
 $$('[data-export]').forEach(b=>b.addEventListener('click',()=>{toggleMenu(false);void exportPNG(b.dataset.export);}));
 
 /* ECDYSIS V33 / reliable motion LOG.
@@ -464,6 +506,29 @@ function availableVideoFormats(){
  return formats.filter(f=>{try{return MediaRecorder.isTypeSupported(f.type);}catch{return false;}});
 }
 
+/* V62: Mobile native image/video encoders must receive the same standard
+ * sRGB colour values as the canvas. Opaque exports composite translucent fibres
+ * against their selected background at the SOURCE resolution, then upscale the
+ * finished opaque image. This avoids dark transparent edges from resampling
+ * low-resolution Android WebGL canvases. No colour boosting or pixel loops. */
+function export2DContext(canvas,options={}){
+ return canvas.getContext('2d',{...options,colorSpace:'srgb'});
+}
+let mobileOpaqueCanvas=null;
+function drawMobileOpaqueSpecimen(ctx,source,x,y,width,height){
+ if(!source?.width||!source?.height)return;
+ if(!mobileOpaqueCanvas)mobileOpaqueCanvas=document.createElement('canvas');
+ if(mobileOpaqueCanvas.width!==source.width)mobileOpaqueCanvas.width=source.width;
+ if(mobileOpaqueCanvas.height!==source.height)mobileOpaqueCanvas.height=source.height;
+ const inner=export2DContext(mobileOpaqueCanvas,{alpha:false});
+ if(!inner){drawExportSpecimen(ctx,source,x,y,width,height);return;}
+ inner.setTransform(1,0,0,1,0,0);
+ inner.globalAlpha=1;
+ inner.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';
+ inner.fillRect(0,0,source.width,source.height);
+ inner.drawImage(source,0,0);
+ drawExportSpecimen(ctx,mobileOpaqueCanvas,x,y,width,height);
+}
 /* V42: canvas export composition must NEVER stretch a specimen when its
  * viewport changes from a square to a wide rectangle (or is resized mid-LOG).
  * Use centered contain fitting for the current rendered canvas dimensions. */
@@ -480,7 +545,8 @@ function composeLogFrame(session,source){
  ctx.globalAlpha=1;
  ctx.fillStyle=canvasBackground==='black'?'#08090b':'#e8dec4';
  ctx.fillRect(0,0,w,h);
- drawExportSpecimen(ctx,source,0,0,w,h);
+ if(IS_MOBILE_COLOR)drawMobileOpaqueSpecimen(ctx,source,0,0,w,h);
+ else drawExportSpecimen(ctx,source,0,0,w,h);
 }
 function outputFile(blob,filename){
  if(!(blob instanceof Blob)||!blob.size){toast('EXPORT FILE IS EMPTY');return;}
@@ -684,13 +750,13 @@ async function startLog(){
   const width=IS_ANDROID?640:1440; // Preserve desktop/iOS 1440px; Android reduces encoder load.
   const height=Math.max(2,2*Math.round(width*source.height/source.width/2));
   const output=document.createElement('canvas');output.width=width;output.height=height;
-  const ctx=output.getContext('2d',{alpha:false});
+  const ctx=export2DContext(output,{alpha:false});
   const gifWidth=IS_ANDROID?ANDROID_GIF_WIDTH:GIF_WIDTH;
   const gifFps=IS_ANDROID?ANDROID_GIF_FPS:GIF_FPS;
   const maxLogSeconds=IS_ANDROID?ANDROID_MAX_LOG_SECONDS:MAX_LOG_SECONDS;
   const gifOutput=document.createElement('canvas');gifOutput.width=gifWidth;
   gifOutput.height=Math.max(2,Math.round(height*gifWidth/width));
-  const gifCtx=gifOutput.getContext('2d',{willReadFrequently:true});
+  const gifCtx=export2DContext(gifOutput,{willReadFrequently:true});
   if(gifCtx){gifCtx.imageSmoothingEnabled=true;gifCtx.imageSmoothingQuality='high';}
   if(!ctx||!gifCtx)throw Error('Canvas capture is not supported');
   session={output,ctx,gifOutput,gifCtx,gifFps,maxLogSeconds,videoFormat:null,frames:[],start:performance.now(),nextGifTime:0,lastPaintTime:-Infinity,recorder:null,chunks:[],stream:null,recordDone:null,stopped:false,raf:0,clockTimer:null,captureError:null,loggedCaptureError:false};

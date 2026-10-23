@@ -5,6 +5,7 @@ const defaults={progress:0,modification:0,scale:1,palette:'origin',inkA:'#599782
 const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255);
 const specimenScaleBias=.75;
 const ANDROID_DEVICE=/Android/i.test(navigator.userAgent);
+const MOBILE_COLOR_FIX=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const STAGE_COUNT=3;
 /* V39: Cyclic mirrored hue drift. 0deg runs A to B, and +/-180deg
  * reverses B to A. There is no sliding gradient beyond the canvas. */
@@ -26,24 +27,79 @@ function orientedGradient(ctx,width,height,stops,hue){
 }
 
 
+/* V63: Topology-preserving Android LOD. V61 sampled one OBJ face in every N,
+ * leaving actual holes in the rendered object. Instead, cluster nearby connected
+ * surface vertices and re-triangulate ALL source faces against those vertices.
+ * Collapsed/duplicate triangles are removed, but entire face regions are NEVER
+ * skipped. The mesh remains closed wherever the original mesh was closed.
+ * Grouping by broad normal orientation also avoids welding opposite sides of
+ * thin shells and disconnected surface layers. */
+export function continuousMobileLOD(geometry,voxelSize=0.018){
+ const oldPos=geometry.pos,oldNorm=geometry.norm,oldUV=geometry.uv;
+ const n=oldPos.length/3, remap=new Uint32Array(n), clusters=new Map();
+ const sums=[], count=[];
+ const cell=clamp(voxelSize,0.012,0.035);
+ for(let i=0;i<n;i++){
+  const k=i*3, nx=oldNorm[k],ny=oldNorm[k+1],nz=oldNorm[k+2];
+  const ax=Math.abs(nx),ay=Math.abs(ny),az=Math.abs(nz);
+  const direction=ax>=ay&&ax>=az?0:ay>=az?1:2;
+  const side=(oldNorm[k+direction]>=0?1:0)+2*direction;
+  const key=Math.floor((oldPos[k]+2.0)/cell)+','+
+    Math.floor((oldPos[k+1]+2.0)/cell)+','+
+    Math.floor((oldPos[k+2]+2.0)/cell)+','+side;
+  let id=clusters.get(key);
+  if(id===undefined){id=sums.length;clusters.set(key,id);sums.push([0,0,0,0,0,0,0,0]);count.push(0);}
+  remap[i]=id;
+  const a=sums[id];
+  a[0]+=oldPos[k];a[1]+=oldPos[k+1];a[2]+=oldPos[k+2];
+  a[3]+=nx;a[4]+=ny;a[5]+=nz;
+  a[6]+=oldUV[i*2];a[7]+=oldUV[i*2+1];count[id]++;
+ }
+ const xyz=new Float32Array(sums.length*3), normal=new Float32Array(sums.length*3),uv=new Float32Array(sums.length*2);
+ for(let i=0;i<sums.length;i++){
+  const a=sums[i],cnt=count[i];
+  xyz.set([a[0]/cnt,a[1]/cnt,a[2]/cnt],i*3);
+  const len=Math.hypot(a[3],a[4],a[5])||1;
+  normal.set([a[3]/len,a[4]/len,a[5]/len],i*3);
+  uv.set([a[6]/cnt,a[7]/cnt],i*2);
+ }
+ const triangles=[],edges=new Set(),lines=[],seenTriangles=new Set();
+ for(let i=0;i<geometry.tri.length;i+=3){
+  const a=remap[geometry.tri[i]],b=remap[geometry.tri[i+1]],c=remap[geometry.tri[i+2]];
+  if(a===b||b===c||a===c)continue;
+  const ai=a*3,bi=b*3,ci=c*3;
+  const abx=xyz[bi]-xyz[ai],aby=xyz[bi+1]-xyz[ai+1],abz=xyz[bi+2]-xyz[ai+2];
+  const acx=xyz[ci]-xyz[ai],acy=xyz[ci+1]-xyz[ai+1],acz=xyz[ci+2]-xyz[ai+2];
+  const x=aby*acz-abz*acy,y=abz*acx-abx*acz,z=abx*acy-aby*acx;
+  if(x*x+y*y+z*z<1e-13)continue;
+  const keys=[a,b,c].sort((u,v)=>u-v);
+  const id=keys.join('/');if(seenTriangles.has(id))continue;
+  seenTriangles.add(id);triangles.push(a,b,c);
+  for(const [u,v] of [[a,b],[b,c],[c,a]]){
+   const lo=Math.min(u,v),hi=Math.max(u,v),edge=lo+'|'+hi;
+   if(!edges.has(edge)){edges.add(edge);lines.push(lo,hi);}
+  }
+ }
+ // Never use a truncated, disconnected LOD due to unexpected OBJ topology.
+ if(triangles.length<geometry.tri.length*0.12)return geometry;
+ const out={pos:xyz,uv,norm:normal,tri:new Uint32Array(triangles),lines:new Uint32Array(lines),
+  skipped:geometry.skipped,mobileContinuous:true};
+ return out;
+}
+
 /* A safe triangulator that does not stretch concave caps across the specimen. */
 export function parseOBJGeometry(source,options={}){
  const vertex=[],rawFaces=[];
- // V61: Android renders a deterministic, spatially distributed subset of the
- // source OBJ faces.  The original assets are never modified.  Triangulation,
- // normals, UVs, and GPU uploads for unselected faces are avoided entirely.
+ // Parse the whole source surface first. Android LOD is performed by
+ // surface vertex clustering AFTER triangulation, never by skipping faces.
  const sourceLines=source.split(/\r?\n/);
  const mobileLOD=Boolean(options.mobileLOD);
- const sourceFaces=mobileLOD?sourceLines.reduce((n,l)=>n+(l.startsWith('f ')?1:0),0):0;
- const faceStride=mobileLOD?Math.max(1,Math.ceil(sourceFaces/26000)):1;
- let faceOrdinal=0;
  for(const raw of sourceLines){
   const l=raw.trim();
   if(l.startsWith('v ')){
    const v=l.split(/\s+/).slice(1,4).map(Number);
    if(v.length===3&&v.every(Number.isFinite))vertex.push(v);
   }else if(l.startsWith('f ')){
-   if(mobileLOD && (faceOrdinal++ % faceStride !== 0)) continue;
    const f=[];
    for(const part of l.slice(2).split(/\s+/)){
     const id=parseInt(part.split('/')[0],10);
@@ -159,9 +215,10 @@ export function parseOBJGeometry(source,options={}){
    }else seamTri[i+j]=original;
   }
  }
- return {pos:new Float32Array(expandedPosition),uv:new Float32Array(expandedUV),
+ const geometry={pos:new Float32Array(expandedPosition),uv:new Float32Array(expandedUV),
   norm:new Float32Array(expandedNormal),tri:seamTri,
   lines:new Uint32Array(lines),skipped};
+ return mobileLOD?continuousMobileLOD(geometry,options.voxelSize??0.018):geometry;
 }
 
 /* Big OBJ parsing runs off the UI thread when possible. */
@@ -308,7 +365,7 @@ function prepareFibreAtlas(image) {
 }
 
 export class Specimen2D{
- constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:true});this.params={...defaults};this.images=Array(STAGE_COUNT).fill(null);this.zoom=1;this.angle=0;this.cache=new Map();this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();}
+ constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:true,colorSpace:'srgb'});this.params={...defaults};this.images=Array(STAGE_COUNT).fill(null);this.zoom=1;this.angle=0;this.cache=new Map();this.observer=new ResizeObserver(()=>this.resize());this.observer.observe(canvas);this.resize();}
  setImage(i,img){this.images[i]=prepareImage(img);this.cache.clear();this.draw();}
  setParams(p){const colorChanged=['palette','inkA','inkB','intensity','hue','monoWhite'].some(k=>k in p&&p[k]!==this.params[k]);Object.assign(this.params,p);if(colorChanged)this.cache.clear();this.draw();}
  resize(){const r=this.canvas.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1);const w=Math.max(2,Math.round(r.width*dpr)),h=Math.max(2,Math.round(r.height*dpr));if(w!==this.canvas.width||h!==this.canvas.height){this.canvas.width=w;this.canvas.height=h;}this.draw();}
@@ -630,7 +687,7 @@ function stableStageWeights(progress,counts){
 }
 
 export class Specimen3D{
- constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:!ANDROID_DEVICE,preserveDrawingBuffer:true,premultipliedAlpha:false});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','verticalRatio','stageOffsetY','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=0;this.pitch=0;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
+ constructor(canvas){this.canvas=canvas;const gl=canvas.getContext('webgl2',{alpha:true,antialias:!ANDROID_DEVICE,preserveDrawingBuffer:true,premultipliedAlpha:MOBILE_COLOR_FIX});if(!gl)throw Error('WebGL2 unavailable');this.gl=gl;if(MOBILE_COLOR_FIX && 'drawingBufferColorSpace' in gl)gl.drawingBufferColorSpace='srgb';this.prog=program(gl);this.uniforms={};for(const k of ['tex','aspect','scale','yaw','pitch','modification','verticalRatio','stageOffsetY','palette','intensity','hue','alpha','glow','wire','monoWhite','phaseMin','phaseMax','a','b'])this.uniforms[k]=gl.getUniformLocation(this.prog,'u_'+k);this.meshes=Array(STAGE_COUNT).fill(null);this.textures=Array(STAGE_COUNT).fill(null);this.params={...defaults};this.yaw=0;this.pitch=0;this.zoom=1;this.flashAt=-1e9;this.flashFrame=0;this.drag=null;this.autoFast=false;this.drawPending=0;this.textureCache=new WeakMap();
   canvas.addEventListener('pointerdown',e=>{
    this.drag={x:e.clientX,y:e.clientY,yaw:this.yaw,pitch:this.pitch};
    canvas.setPointerCapture(e.pointerId);
@@ -661,7 +718,7 @@ export class Specimen3D{
   const paint=t=>{
    // Cap Android interactive GPU/CPU draws near 18fps without adding delays
    // to PNG exports (exportCanvas continues to draw immediately).
-   if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<55){
+   if(ANDROID_DEVICE&&t-(this.lastInteractivePaint||0)<75){
     this.drawPending=requestAnimationFrame(paint);return;
    }
    this.drawPending=0;
@@ -697,12 +754,17 @@ export class Specimen3D{
  resize(){
   const r=this.canvas.getBoundingClientRect();
   // Retina browsers otherwise shade millions of extra pixels per frame.
-  const dpr=Math.min(ANDROID_DEVICE?0.95:1.45,window.devicePixelRatio||1);
+  const deviceDPR=Math.min(ANDROID_DEVICE?1.30:1.45,window.devicePixelRatio||1);
+  const dpr=ANDROID_DEVICE?Math.min(deviceDPR,Math.sqrt(1200000/Math.max(1,r.width*r.height))):deviceDPR;
   const w=Math.max(2,Math.round(r.width*dpr)),h=Math.max(2,Math.round(r.height*dpr));
   if(w!==this.canvas.width||h!==this.canvas.height){this.canvas.width=w;this.canvas.height=h;}
   this.requestDraw();
  }
- draw(){const gl=this.gl,p=this.params;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(this.prog);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.CULL_FACE);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+ draw(){const gl=this.gl,p=this.params;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(this.prog);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.CULL_FACE);gl.enable(gl.BLEND);
+  // V62 mobile: the framebuffer must contain premultiplied RGB AND ordinary
+  // (non-squared) alpha. Otherwise the canvas compositor can darken translucent fibres.
+  if(MOBILE_COLOR_FIX)gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  else gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
   const set=(k,v)=>gl.uniform1f(this.uniforms[k],v);const baseScale=p.scale*this.zoom*specimenScaleBias;set('aspect',this.canvas.width/this.canvas.height);set('yaw',this.yaw);set('pitch',this.pitch+0.17*clamp((p.progress-50)/50));set('modification',p.modification);set('palette',palettes[p.palette]??0);set('monoWhite',p.monoWhite||0);set('intensity',p.intensity);set('hue',p.hue);set('wire',p.mode==='wire'?1:0);set('glow',clamp(1-(performance.now()-this.flashAt)/440)**2);gl.uniform3fv(this.uniforms.a,rgb(p.inkA));gl.uniform3fv(this.uniforms.b,rgb(p.inkB));gl.uniform1i(this.uniforms.tex,0);
   const counts=this.meshes.map(m=>m?m.tri:0);
   const weights=stableStageWeights(p.progress,counts);
@@ -737,7 +799,7 @@ export class Specimen3D{
 export class SpecimenSoftware3D {
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d', {alpha:true});
+    this.ctx = canvas.getContext('2d', {alpha:true,colorSpace:'srgb'});
     if (!this.ctx) throw new Error('Canvas2D is also unavailable');
     this.backend = 'software-3d';
     this.params = {...defaults};
@@ -801,7 +863,7 @@ export class SpecimenSoftware3D {
     const normals = geometry.norm;
     const indices = geometry.tri;
     const faces = indices.length / 3;
-    const target = ANDROID_DEVICE?900:3400;
+    const target = ANDROID_DEVICE?1600:3400;
     const step = Math.max(1, Math.floor(faces / target));
     const seen = new Set();
     const points = [];
@@ -818,11 +880,11 @@ export class SpecimenSoftware3D {
       const nx = (normals[a]+normals[b]+normals[c])/3;
       const ny = (normals[a+1]+normals[b+1]+normals[c+1])/3;
       const nz = (normals[a+2]+normals[b+2]+normals[c+2])/3;
-      const key = [Math.floor((x+3)*32),Math.floor((y+3)*32),Math.floor((z+3)*32)].join(':');
+      const key = [Math.floor((x+3)*44),Math.floor((y+3)*44),Math.floor((z+3)*44)].join(':');
       if (seen.has(key)) continue;
       seen.add(key);
       points.push({x,y,z,nx,ny,nz,id:face});
-      if (points.length >= (ANDROID_DEVICE?1000:3600)) break;
+      if (points.length >= (ANDROID_DEVICE?1800:3600)) break;
     }
     if (!points.length) throw new Error('OBJ has no renderable surface samples');
     this.meshes[i] = points;
@@ -865,7 +927,7 @@ export class SpecimenSoftware3D {
 
   resize() {
     const r = this.canvas.getBoundingClientRect();
-    const ratio = Math.min(ANDROID_DEVICE?0.9:1.25,window.devicePixelRatio||1);
+    const ratio = Math.min(ANDROID_DEVICE?1.15:1.25,window.devicePixelRatio||1);
     const w = Math.max(2,Math.round(r.width*ratio));
     const h = Math.max(2,Math.round(r.height*ratio));
     if (w !== this.canvas.width || h !== this.canvas.height) {
