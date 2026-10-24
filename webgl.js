@@ -1,7 +1,7 @@
 /* ECDYSIS V23 — full-quality 3D ink while moving, fixed resolution, identical surface coverage */
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
 const palettes={origin:0,prism:1,shell:2,mint:3,custom:4,monotone:5};
-const defaults={progress:0,modification:0,scale:1,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.6,hue:0,mode:'surface',monoWhite:0};
+const defaults={progress:0,modification:0,scale:1,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.35,hue:0,mode:'surface',monoWhite:0};
 const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255);
 const specimenScaleBias=.75;
 const ANDROID_DEVICE=/Android/i.test(navigator.userAgent);

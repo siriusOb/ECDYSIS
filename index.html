@@ -2177,8 +2177,74 @@ html.ecd-iphone .site-header .wordmark span::after {
 }
 /* Keep the already-established flush title/ink mobile layout. */
 
+
+/* ==============================================================
+   ECDYSIS V68 — PRESET LABELS / SAME ID EDITORIAL BALANCE
+   Six pigment names use the same 9px monospaced size as the SAND /
+   BEIGE habitat button. Preserve the existing three-column chips.
+   Maintain the desktop manifesto 600px section height, center
+   the image, and distribute the 3 text paragraphs vertically.
+   Mobile: overlap the empty transparent-ink margin instead of
+   shrinking the illustration or changing its scale.
+   ============================================================== */
+#view-molt .lab-layout .specimen-archive .colour-lab .palette {
+  font: 9px/1.25 var(--mono) !important;
+}
+@media (min-width: 801px) {
+  #view-ecdysis .manifesto {
+    min-height: 600px;
+    align-items: stretch;
+  }
+  #view-ecdysis .manifesto-image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 580px;
+  }
+  #view-ecdysis .manifesto-image img {
+    object-fit: contain;
+    object-position: center center;
+    transform: rotate(12deg) scale(1.30);
+    transform-origin: 50% 50%;
+  }
+  #view-ecdysis .manifesto-text {
+    min-height: 600px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: clamp(26px, 3vw, 46px);
+    padding: clamp(56px, 6vw, 84px) clamp(28px, 4.4vw, 74px);
+  }
+  #view-ecdysis .manifesto-text > .micro.subdued:first-child {
+    margin: 0;
+    flex: 0 0 auto;
+  }
+  #view-ecdysis .manifesto-text h3 {
+    margin: 0;
+    flex: 0 0 auto;
+    line-height: 1.12;
+  }
+  #view-ecdysis .manifesto-text > p {
+    margin: 0;
+    flex: 0 0 auto;
+    max-width: 480px;
+    line-height: 1.6;
+  }
+}
+@media (max-width: 600px) {
+  html.ecd-iphone #view-ecdysis .manifesto-text,
+  html.ecd-android #view-ecdysis .manifesto-text {
+    /* Compensate for transparent margins inside cocoon7-ink.png. */
+    margin-top: clamp(-52px, -11vw, -33px) !important;
+    position: relative;
+    z-index: 1;
+  }
+}
+
 </style>
-  <link rel="stylesheet" href="styles.css?v=67" />
+  <link rel="stylesheet" href="styles.css?v=68" />
   <!-- V30: One stable intro source; animation starts only after ink and type are ready. -->
   <style id="ecdysis-intro-stability-v30">
     #intro .intro-image {
@@ -2316,7 +2382,7 @@ html.ecd-iphone .site-header .wordmark span::after {
             <div id="habitat-mount" class="pigment-habitat"></div>
             <div class="palette-list" role="group" aria-label="Colour presets"><button class="palette active" data-palette="origin" type="button"><i class="swatch swatch-origin"></i>ORIGIN</button><button class="palette" data-palette="shell" type="button"><i class="swatch swatch-shell"></i>SHELL</button><button class="palette" data-palette="mint" type="button"><i class="swatch swatch-mint"></i>SEA GLASS</button><button class="palette" data-palette="prism" type="button"><i class="swatch swatch-prism"></i>PRISM</button><button class="palette" data-palette="monotone" type="button"><i class="swatch swatch-monotone"></i>MONOTONE</button><button class="palette" data-palette="custom" type="button"><i class="swatch swatch-custom"></i>CUSTOM</button></div>
             <div class="ink-pickers"><label>DYE A <input id="color-a" type="color" value="#599782" /></label><label>DYE B <input id="color-b" type="color" value="#72092a" /></label><span class="micro">SELECT &#x2192; CUSTOM</span></div>
-            <div class="sliders"><label class="slider-row"><span>PIGMENT SATURATION</span><output id="out-intensity">0.60</output><input data-param="intensity" type="range" min="0" max="1" step="0.01" value="0.6" /></label><label class="slider-row"><span>PIGMENT PHASE</span><output id="out-hue">0</output><input data-param="hue" type="range" min="-180" max="180" step="1" value="0" /></label></div>
+            <div class="sliders"><label class="slider-row"><span>PIGMENT SATURATION</span><output id="out-intensity">0.35</output><input data-param="intensity" type="range" min="0" max="1" step="0.01" value="0.35" /></label><label class="slider-row"><span>PIGMENT PHASE</span><output id="out-hue">0</output><input data-param="hue" type="range" min="-180" max="180" step="1" value="0" /></label></div>
           </section>
 
           <section class="specimen-card specimen-card--archive" aria-label="Memory output archive">
@@ -2370,7 +2436,7 @@ html.ecd-iphone .site-header .wordmark span::after {
     })();
   </script>
   <script type="module">
-    import('./app.js?v=67').then(function () {
+    import('./app.js?v=68').then(function () {
       document.documentElement.dataset.ecdysisReady = 'true';
     }).catch(function (error) {
       console.error('[ECDYSIS] Application startup failed:', error);

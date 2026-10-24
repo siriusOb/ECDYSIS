@@ -1,12 +1,12 @@
 /* ECDYSIS V27 — independent 2D/3D scales (2D 1.30, 3D 0.75) */
-import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=65';
+import {Specimen2D,Specimen3D,SpecimenSoftware3D,parseOBJAsync} from './webgl.js?v=68';
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));
 const IS_ANDROID=/Android/i.test(navigator.userAgent);
 const IS_MOBILE_COLOR=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const names=['COCOON','HATCH','MOLT'];
 const STAGE_COUNT=names.length;
 const stageProgress=index=>Math.round(100*index/(STAGE_COUNT-1));
-const DEFAULT={progress:0,modification:0,scale:1.3,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.6,hue:0,mode:'surface',rotate:false,monoWhite:0};
+const DEFAULT={progress:0,modification:0,scale:1.3,palette:'origin',inkA:'#599782',inkB:'#72092a',intensity:.35,hue:0,mode:'surface',rotate:false,monoWhite:0};
 const dimensionScales={ '2d':1.3, '3d':0.75 }; // Android MAGNITUDE starts at 0.75; remains user-adjustable.
 let state={...DEFAULT},dimension='2d',twoD=null,threeD=null,playing=false,playStart=0,frameId=0,introTimer=0,introFade=0,toastTimer=0,modelsLoading=null;
 const pics=Array(STAGE_COUNT).fill(null);
@@ -40,9 +40,9 @@ else dim.insertAdjacentElement('afterend',backdropControl);
 const orbitControl=$('#toggle-rotate');
 if(orbitControl){const orbitMount=$('#orbit-mount');if(orbitMount)orbitMount.appendChild(orbitControl);else dim.insertAdjacentElement('afterend',orbitControl);}
 const modeBackgrounds={'2d':'beige','3d':'black'};
-// Android starts with 3D auto-orbit paused to prevent continuous GPU load.
-// Manual drag and the ORBIT toggle remain available.
-const modeOrbits={'2d':false,'3d':!IS_ANDROID};
+// V68: 3D ORBIT is active by default on every platform, including Android.
+// Android keeps its existing frame throttling for ordinary operation.
+const modeOrbits={'2d':false,'3d':true};
 const specimenStage=$('#view-molt .canvas-stage');
 if(specimenStage)specimenStage.dataset.dimension=dimension;
 let canvasBackground='beige';
@@ -273,6 +273,8 @@ async function changeDimension(to){
  // Remember the viewer-adjusted slider value before switching modes.
  dimensionScales[dimension]=state.scale;
  if(to==='3d'){
+  // Entering Android 3D should always enable ORBIT; the user can pause it.
+  if(IS_ANDROID)modeOrbits['3d']=true;
   // Make the existing 3D surface reflect the selected phase before revealing
   // it; it must never temporarily display a stale/default COCOON frame.
   if(threeD) threeD.setParams({...state,scale:dimensionScales['3d']});
@@ -337,7 +339,7 @@ $$('[data-param]').forEach(inp=>inp.addEventListener('input',()=>{state[inp.data
 $$('[data-mode]').forEach(b=>b.addEventListener('click',()=>{state.mode=b.dataset.mode;updateUI();render();}));
 $$('[data-palette]').forEach(b=>b.addEventListener('click',()=>{state.palette=b.dataset.palette;updateUI();render();}));
 for(const [selector,key] of [['#color-a','inkA'],['#color-b','inkB']])$(selector).addEventListener('input',e=>{state[key]=e.target.value;state.palette='custom';updateUI();if(!inputRAF)inputRAF=requestAnimationFrame(()=>{inputRAF=0;render();});});
-$('#reset-all').addEventListener('click',()=>{playing=false;dimensionScales['2d']=1.3;dimensionScales['3d']=0.75;modeBackgrounds['2d']='beige';modeBackgrounds['3d']='black';modeOrbits['2d']=false;modeOrbits['3d']=!IS_ANDROID;state={...DEFAULT,scale:dimensionScales[dimension],rotate:modeOrbits[dimension]};if(twoD){twoD.zoom=1;twoD.angle=0;}if(threeD){threeD.zoom=1;threeD.yaw=0;threeD.pitch=0;threeD.setInteractiveMode?.(dimension==='3d'&&state.rotate);}setCanvasBackground(modeBackgrounds[dimension]);updateUI();render();animate();toast('RESET / ORIGIN RESTORED');});
+$('#reset-all').addEventListener('click',()=>{playing=false;dimensionScales['2d']=1.3;dimensionScales['3d']=0.75;modeBackgrounds['2d']='beige';modeBackgrounds['3d']='black';modeOrbits['2d']=false;modeOrbits['3d']=true;state={...DEFAULT,scale:dimensionScales[dimension],rotate:modeOrbits[dimension]};if(twoD){twoD.zoom=1;twoD.angle=0;}if(threeD){threeD.zoom=1;threeD.yaw=0;threeD.pitch=0;threeD.setInteractiveMode?.(dimension==='3d'&&state.rotate);}setCanvasBackground(modeBackgrounds[dimension]);updateUI();render();animate();toast('RESET / ORIGIN RESTORED');});
 $('#toggle-rotate').addEventListener('click',()=>{state.rotate=!state.rotate;modeOrbits[dimension]=state.rotate;threeD?.setInteractiveMode?.(state.rotate&&dimension==='3d');updateUI();animate();});
 // UNFOLD CYCLE: pointerdown is immediate on mouse/touch, with click
 // fallback for keyboard. 100% restarts from the initial COCOON state.
