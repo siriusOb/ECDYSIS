@@ -2100,3 +2100,31 @@
     vertical-align: super;
   }
   
+  /* ==============================================================
+     ECDYSIS V66 — SAME ID SECTION / NO CHANGE TO LAB OR EXPORTS
+     Desktop: reduce bottom dead space and center the right-hand
+     typographic composition alongside the ink image.  Preserve the
+     image's visual height after the section gets shorter.
+     Mobile: halve the text panel's 65px lower padding to 32.5px,
+     removing the legacy fixed 430px panel height. Existing iOS and
+     Android zero-gap image/title rules remain authoritative.
+     ============================================================== */
+  @media (min-width: 801px) {
+    #view-ecdysis .manifesto { min-height: 600px; }
+    #view-ecdysis .manifesto-image { min-height: 580px; }
+    #view-ecdysis .manifesto-image img { height: 90%; }
+    #view-ecdysis .manifesto-text {
+      justify-content: center;
+      padding-top: 90px;
+      padding-bottom: 35px;
+    }
+    #view-ecdysis .manifesto-text h3 { margin-top: 35px; }
+  }
+  @media (max-width: 800px) {
+    #view-ecdysis .manifesto { min-height: 0; }
+    #view-ecdysis .manifesto-text {
+      min-height: 0;
+      padding-bottom: 32.5px;
+    }
+  }
+  
