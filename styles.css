@@ -2128,3 +2128,33 @@
     }
   }
   
+  
+  /* ==============================================================
+     ECDYSIS V67 — SAME ID EDITORIAL BALANCE
+     Preserve the V65 1.3x mobile ink, V66 compact mobile spacing.
+     The desktop ink is enlarged by 30% against the V66 transform.
+     The right editorial group uses symmetric block padding and a
+     consistent gap, instead of asymmetric padding + heading margin.
+     ============================================================== */
+  @media (min-width: 801px) {
+    #view-ecdysis .manifesto { min-height: 600px; }
+    #view-ecdysis .manifesto-image { min-height: 580px; }
+    #view-ecdysis .manifesto-image img {
+      transform: rotate(12deg) scale(1.30);
+      transform-origin: center center;
+    }
+    #view-ecdysis .manifesto-text {
+      box-sizing: border-box;
+      justify-content: center;
+      align-items: flex-start;
+      gap: clamp(14px, 1.8vw, 24px);
+      padding: clamp(46px, 5.3vw, 80px) clamp(28px, 4.4vw, 74px);
+    }
+    #view-ecdysis .manifesto-text h3 {
+      margin: 0;
+      line-height: 1.12;
+    }
+    #view-ecdysis .manifesto-text > p { margin: 0; }
+  }
+  /* Keep the already-established flush title/ink mobile layout. */
+  

@@ -632,6 +632,14 @@ function quantizeGifPixels(rgba,width){
  }
  return indexed;
 }
+/* V67: Android GIF capture pipeline.
+ * Old pipeline rasterized/scaled the video frame and synchronously called
+ * getImageData() on the UI thread 8 times a second during heavy WebGL.
+ * Transfer an ImageBitmap snapshot to a dedicated OffscreenCanvas worker
+ * whenever the browser supports it. All resizing + pixel readback + palette
+ * conversion then happens OFF the input/render thread.
+ * Older browsers retain the tested RGBA worker path without reducing any
+ * GIF resolution, frame rate or palette size. Max 2 queued captures. */
 function installAndroidGifQuantizer(session){
  if(!IS_ANDROID||typeof Worker==='undefined')return;
  let url=null;
@@ -640,35 +648,94 @@ function installAndroidGifQuantizer(session){
 let gifColorLookup=null;
 ${getGifColorLookup.toString()}
 ${quantizeGifPixels.toString()}
-self.onmessage=e=>{try{const {id,rgba,width}=e.data;const indexed=quantizeGifPixels(new Uint8ClampedArray(rgba),width);self.postMessage({id,buffer:indexed.buffer},[indexed.buffer]);}catch(error){self.postMessage({id,error:String(error?.message||error)});}};`;
+let offscreen=null,offCtx=null;
+self.onmessage=e=>{
+ const d=e.data||{};
+ if(d.probe){self.postMessage({capable:typeof OffscreenCanvas==='function'&&typeof ImageBitmap!=='undefined'});return;}
+ let bitmap=d.bitmap||null;
+ try{
+  const {id,width,height}=d;
+  let rgba;
+  if(bitmap){
+   if(typeof OffscreenCanvas!=='function')throw Error('OffscreenCanvas unavailable');
+   if(!offscreen||offscreen.width!==width||offscreen.height!==height){
+    offscreen=new OffscreenCanvas(width,height);
+    offCtx=offscreen.getContext('2d',{alpha:false,willReadFrequently:true,colorSpace:'srgb'});
+   }
+   if(!offCtx)throw Error('Worker canvas unavailable');
+   offCtx.imageSmoothingEnabled=true;
+   offCtx.imageSmoothingQuality='high';
+   offCtx.drawImage(bitmap,0,0,width,height);
+   bitmap.close();bitmap=null;
+   rgba=offCtx.getImageData(0,0,width,height).data;
+  }else rgba=new Uint8ClampedArray(d.rgba);
+  const indexed=quantizeGifPixels(rgba,width);
+  self.postMessage({id,buffer:indexed.buffer},[indexed.buffer]);
+ }catch(error){self.postMessage({id:d.id,error:String(error?.message||error)});}
+ finally{if(bitmap)try{bitmap.close()}catch{}}
+};`;
   url=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
   const worker=new Worker(url);
   URL.revokeObjectURL(url);
   session.gifWorker=worker;
+  session.gifOffscreenReady=false;
   worker.onmessage=e=>{
+   if(typeof e.data?.capable==='boolean'){
+    session.gifOffscreenReady=Boolean(e.data.capable&&typeof createImageBitmap==='function');
+    return;
+   }
    session.gifOutstanding=Math.max(0,session.gifOutstanding-1);
    const {id,buffer,error}=e.data||{};
    if(buffer && id>=0 && id<session.frames.length)session.frames[id]=new Uint8Array(buffer);
-   else if(error)console.warn('[ECDYSIS] Android GIF frame fallback:',error);
+   else if(error){
+    if(session.gifOffscreenReady)session.gifOffscreenReady=false;
+    console.warn('[ECDYSIS] Android GIF frame fallback:',error);
+   }
   };
   worker.onerror=e=>{
    console.warn('[ECDYSIS] GIF quantizer unavailable; local fallback:',e.message);
    worker.terminate();if(session.gifWorker===worker)session.gifWorker=null;
+   session.gifOffscreenReady=false;
    session.gifOutstanding=0;
   };
+  worker.postMessage({probe:true});
  }catch(error){if(url)URL.revokeObjectURL(url);console.warn('[ECDYSIS] GIF quantizer worker unavailable:',error);}
 }
 function gifSnapshot(session){
  const {gifOutput,gifCtx,output}=session;
+ if(session.gifWorker){
+  // Bounded GPU snapshot queue, with no loss of GIF playback duration.
+  if(session.gifOutstanding>=2){
+   const previous=session.frames.length?session.frames[session.frames.length-1]:null;
+   session.frames.push(previous||null);
+   return;
+  }
+  if(session.gifOffscreenReady){
+   const id=session.frames.length;
+   session.frames.push(null);
+   session.gifOutstanding++;
+   // Bitmap capture resolves asynchronously: the 3D canvas, screenshot
+   // scaling and getImageData never block a touch or WebGL draw callback.
+   let bmpPromise;
+   try{bmpPromise=createImageBitmap(output);}catch(error){bmpPromise=Promise.reject(error);}
+   Promise.resolve(bmpPromise).then(bitmap=>{
+    if(session.gifWorker&&!session.gifWorkerClosed){
+     try{session.gifWorker.postMessage({id,width:gifOutput.width,height:gifOutput.height,bitmap},[bitmap]);return;}
+     catch(error){console.warn('[ECDYSIS] bitmap transfer failed:',error);}
+    }
+    bitmap.close();session.gifOutstanding=Math.max(0,session.gifOutstanding-1);
+   }).catch(error=>{
+    console.warn('[ECDYSIS] Android async GIF capture unavailable:',error);
+    session.gifOutstanding=Math.max(0,session.gifOutstanding-1);
+    session.gifOffscreenReady=false; // fall back on following frame
+   });
+   return;
+  }
+ }
+ // Compatibility path for old Android Chromium and non-Android browsers.
  gifCtx.drawImage(output,0,0,gifOutput.width,gifOutput.height);
  const rgba=gifCtx.getImageData(0,0,gifOutput.width,gifOutput.height).data;
  if(session.gifWorker){
-  // Never allow a backlog of jobs to make the next touch unresponsive.
-  if(session.gifOutstanding>=3){
-   const previous=session.frames.length?session.frames[session.frames.length-1]:null;
-   session.frames.push(previous||null); // keep approximate GIF wall-clock duration
-   return;
-  }
   const id=session.frames.length;
   session.frames.push(null);
   session.gifOutstanding++;
@@ -677,7 +744,7 @@ function gifSnapshot(session){
    return;
   }catch(error){
    session.frames.pop();session.gifOutstanding--;
-   console.warn('[ECDYSIS] GIF worker post failed, falling back:',error);
+   console.warn('[ECDYSIS] GIF worker post failed; local fallback:',error);
    session.gifWorker.terminate();session.gifWorker=null;
   }
  }
@@ -942,6 +1009,7 @@ async function startLog(){
  }catch(error){
   console.error('[ECDYSIS] LOG could not start:',error);
   if(session?.clockTimer)clearInterval(session.clockTimer);
+  if(session)session.gifWorkerClosed=true;
   session?.gifWorker?.terminate();
   session?.stream?.getTracks().forEach(track=>track.stop());
   if(IS_ANDROID)threeD?.setRecordingCapture?.(false);
@@ -996,7 +1064,7 @@ async function stopLog(){
   toast('LOG FAILED: '+(error.message||error));
  }finally{
   session.stream?.getTracks().forEach(track=>track.stop());
-  session.gifWorker?.terminate();session.gifWorker=null;
+  session.gifWorkerClosed=true;session.gifWorker?.terminate();session.gifWorker=null;
   session.frames=[];logSession=null;setLogButton('idle');
  }
 }
